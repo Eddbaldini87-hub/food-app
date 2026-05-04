@@ -3110,8 +3110,6 @@ export default function Page() {
     clearPosSales,
     updatePosDishMatch,
     setActiveView,
-    editSupplier,
-    deleteSupplier,
   });
 
 
@@ -3131,6 +3129,7 @@ export default function Page() {
     if (activeView === "stocktake") return renderStocktakePage();
     if (activeView === "suppliers") return renderSuppliersPage();
     if (activeView === "invoice") return renderInvoicePage();
+    if (activeView === "consumables") return renderConsumablesPage();
     if (activeView === "posSales") return renderPosSalesPage();
     if (activeView === "recipes") return renderRecipesPage();
     if (activeView === "recipeDetail") return renderRecipeDetailSection();
