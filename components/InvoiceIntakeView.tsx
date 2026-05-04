@@ -55,10 +55,9 @@ export function InvoiceIntakeView(props: any) {
   const [invoiceReviewFilter, setInvoiceReviewFilter] = useState("all");
   const [invoiceReviewSearchTerm, setInvoiceReviewSearchTerm] = useState("");
   const [invoiceReviewSortKey, setInvoiceReviewSortKey] = useState("original");
-  const [invoiceReviewMode, setInvoiceReviewMode] = useState<"normal" | "compact">(() => {
-    if (typeof window !== "undefined" && window.innerWidth < 768) return "compact";
-    return "normal";
-  });
+  const [invoiceReviewMode, setInvoiceReviewMode] = useState<"normal" | "compact">(() =>
+    typeof window !== "undefined" && window.innerWidth <= 820 ? "compact" : "normal"
+  );
   const [showInvoiceMatchDebug, setShowInvoiceMatchDebug] = useState(false);
   const [savedSupplierMatchRows, setSavedSupplierMatchRows] = useState<Record<string, boolean>>({});
   const [trialModeNotes, setTrialModeNotes] = useState("");
@@ -66,29 +65,16 @@ export function InvoiceIntakeView(props: any) {
   const lastInvoiceRowCountRef = useRef(0);
 
   useEffect(() => {
-    const handleResize = () => {
-      if (typeof window !== "undefined" && window.innerWidth < 768) {
+    const syncInvoiceMobileMode = () => {
+      if (window.innerWidth <= 820) {
         setInvoiceReviewMode("compact");
       }
     };
 
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    syncInvoiceMobileMode();
+    window.addEventListener("resize", syncInvoiceMobileMode);
+    return () => window.removeEventListener("resize", syncInvoiceMobileMode);
   }, []);
-
-  const mobileCompactCardStyle = {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
-    gap: 8,
-    marginTop: 10,
-  };
-
-  const warningActionCardStyle = {
-    ...styles.infoCard,
-    cursor: "pointer",
-    border: "1px solid rgba(245, 158, 11, 0.42)",
-  };
 
   const getInvoiceRowCogsType = (row: any) => {
     const rawType = String(row?.cogsType || row?.cogsCategory || "unknown").toLowerCase();
@@ -1106,6 +1092,83 @@ export function InvoiceIntakeView(props: any) {
     setInvoiceReviewSortKey("original");
   };
 
+  const handleJumpToInvoiceFilter = (filterKey: string) => {
+    setInvoiceReviewSearchTerm("");
+    setInvoiceReviewFilter(filterKey);
+
+    if (filterKey === "unknown") {
+      setInvoiceReviewSortKey("unknown_first");
+    } else if (filterKey === "unmatched_food" || filterKey === "needs_fix") {
+      setInvoiceReviewSortKey("needs_fix_first");
+    } else if (filterKey === "price_warnings") {
+      setInvoiceReviewSortKey("price_warnings_first");
+    }
+
+    window.setTimeout(() => {
+      invoiceReviewPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  };
+
+  const getFirstInvoiceProblemRow = () => {
+    const rows = Array.isArray(supplierInvoiceRows) ? supplierInvoiceRows : [];
+
+    return rows.find((row: any) => {
+      const cogsType = getInvoiceRowCogsType(row);
+      const linkedIngredientId = String(row?.linkedIngredientId || "").trim();
+      const status = String(row?.status || "").toLowerCase();
+      const hasPriceWarning = getInvoiceRowDamageFlags(row).some((flag: string) =>
+        flag.includes("Price rise") || flag.includes("Price spike") || flag.includes("Margin killer")
+      );
+
+      return (
+        cogsType === "unknown" ||
+        (cogsType === "food_cogs" && !linkedIngredientId && status !== "create_new" && status !== "ignore") ||
+        hasPriceWarning
+      );
+    }) || null;
+  };
+
+  const handleFixNextInvoiceProblem = () => {
+    const problemRow = getFirstInvoiceProblemRow();
+
+    if (!problemRow) {
+      setSupplierInvoiceMessage("No obvious invoice problems left. Do one final review, then lock it clean.");
+      setInvoiceReviewFilter("all");
+      return;
+    }
+
+    const cogsType = getInvoiceRowCogsType(problemRow);
+    const linkedIngredientId = String(problemRow?.linkedIngredientId || "").trim();
+    const status = String(problemRow?.status || "").toLowerCase();
+    const hasPriceWarning = getInvoiceRowDamageFlags(problemRow).some((flag: string) =>
+      flag.includes("Price rise") || flag.includes("Price spike") || flag.includes("Margin killer")
+    );
+
+    if (cogsType === "unknown") {
+      setInvoiceReviewFilter("unknown");
+      setInvoiceReviewSortKey("unknown_first");
+    } else if (cogsType === "food_cogs" && !linkedIngredientId && status !== "create_new" && status !== "ignore") {
+      setInvoiceReviewFilter("unmatched_food");
+      setInvoiceReviewSortKey("needs_fix_first");
+    } else if (hasPriceWarning) {
+      setInvoiceReviewFilter("price_warnings");
+      setInvoiceReviewSortKey("price_warnings_first");
+    } else {
+      setInvoiceReviewFilter("needs_fix");
+      setInvoiceReviewSortKey("needs_fix_first");
+    }
+
+    setInvoiceFixingRowId(problemRow.id);
+    window.setTimeout(() => {
+      const rowElement = document.getElementById(`invoice-row-${problemRow.id}`);
+      if (rowElement) {
+        rowElement.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else {
+        invoiceReviewPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 120);
+  };
+
   const invoiceLockBlockingSummary = (() => {
     const rows = Array.isArray(supplierInvoiceRows) ? supplierInvoiceRows : [];
     const selectedRows = rows.filter((row: any) => row?.selected !== false && String(row?.status || "").toLowerCase() !== "ignore");
@@ -1280,15 +1343,6 @@ export function InvoiceIntakeView(props: any) {
 
   const scrollToInvoiceReviewPanel = () => {
     invoiceReviewPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
-  const jumpToInvoiceProblemFilter = (filterKey: string, sortKey = "needs_fix_first") => {
-    setInvoiceReviewSearchTerm("");
-    setInvoiceReviewFilter(filterKey);
-    setInvoiceReviewSortKey(sortKey);
-    window.setTimeout(() => {
-      invoiceReviewPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 80);
   };
 
   useEffect(() => {
@@ -1767,39 +1821,55 @@ export function InvoiceIntakeView(props: any) {
                 ) : null}
 
                 {Array.isArray(supplierInvoiceRows) && supplierInvoiceRows.length > 0 ? (
-                  <div ref={invoiceReviewPanelRef} style={styles.cardInset}>
-                    <h3 style={styles.sectionGroupTitle}>Fix & Review Lines</h3>
-                    <div style={styles.infoCardSubtext}>Only risky rows should slow you down. Clean rows can move fast.</div>
-                    <div style={{ ...styles.infoCard, marginTop: 10, border: "1px solid rgba(245, 158, 11, 0.36)", background: "rgba(245, 158, 11, 0.08)" }}>
-                      <div style={styles.infoCardTitle}>Trouble Spots</div>
-                      <div style={{ ...styles.formGrid, marginTop: 10 }}>
-                        <button type="button" style={warningActionCardStyle} onClick={() => jumpToInvoiceProblemFilter("unknown", "unknown_first")}>
-                          <div style={styles.infoCardTitle}>Unknown Rows</div>
-                          <div style={{ ...styles.infoCardText, color: invoiceReviewWarningSummary.unknownRowsCount > 0 ? "#fde68a" : undefined }}>
-                            {invoiceReviewWarningSummary.unknownRowsCount}
-                          </div>
-                          <div style={styles.infoCardSubtext}>Tap to show only unknown rows.</div>
-                        </button>
-                        <button type="button" style={warningActionCardStyle} onClick={() => jumpToInvoiceProblemFilter("unmatched_food", "needs_fix_first")}>
-                          <div style={styles.infoCardTitle}>Unmatched Food</div>
-                          <div style={{ ...styles.infoCardText, color: invoiceReviewWarningSummary.unmatchedFoodCount > 0 ? "#fecaca" : undefined }}>
-                            {invoiceReviewWarningSummary.unmatchedFoodCount}
-                          </div>
-                          <div style={styles.infoCardSubtext}>Tap to link or create food rows.</div>
-                        </button>
-                        <button type="button" style={warningActionCardStyle} onClick={() => jumpToInvoiceProblemFilter("price_warnings", "price_warnings_first")}>
-                          <div style={styles.infoCardTitle}>Price Warnings</div>
-                          <div style={{ ...styles.infoCardText, color: invoiceReviewWarningSummary.priceWarningCount > 0 ? "#fca5a5" : undefined }}>
-                            {invoiceReviewWarningSummary.priceWarningCount}
-                          </div>
-                          <div style={styles.infoCardSubtext}>Tap to check price spikes.</div>
-                        </button>
+                  <div id="invoice-review-list" ref={invoiceReviewPanelRef} style={styles.cardInset}>
+                    <div style={{ ...styles.sectionGroupHeaderRow, alignItems: "center" }}>
+                      <div>
+                        <h3 style={styles.sectionGroupTitle}>Fix & Review Lines</h3>
+                        <div style={styles.infoCardSubtext}>Mobile-first review: tap a warning, fix the row, then move to the next problem.</div>
                       </div>
+                      <button type="button" style={styles.primaryButton} onClick={handleFixNextInvoiceProblem}>Fix Next Problem</button>
+                    </div>
+
+                    <div style={{
+                      ...styles.infoCard,
+                      position: "sticky",
+                      top: 8,
+                      zIndex: 8,
+                      marginTop: 10,
+                      border: "1px solid rgba(59, 130, 246, 0.35)",
+                      background: "rgba(15, 23, 42, 0.96)",
+                      boxShadow: "0 18px 45px rgba(0,0,0,0.28)",
+                    }}>
+                      <div style={styles.infoCardTitle}>Phone Fix Bar</div>
                       <div style={{ ...styles.buttonRow, marginTop: 10 }}>
-                        <button type="button" style={styles.primaryButton} onClick={showOnlyInvoiceRowsNeedingFix}>Fix Next Problem</button>
-                        <button type="button" style={styles.secondaryButton} onClick={() => jumpToInvoiceProblemFilter("all", "needs_fix_first")}>Show All Review Rows</button>
+                        <button type="button" style={styles.primaryButton} onClick={handleFixNextInvoiceProblem}>Fix Next Problem</button>
+                        <button type="button" style={styles.secondaryButton} onClick={() => handleJumpToInvoiceFilter("needs_fix")}>Fix Only ({invoiceReviewReadinessSummary.needsFixRowsCount})</button>
+                        <button type="button" style={styles.secondaryButton} onClick={() => setInvoiceReviewMode(invoiceReviewMode === "compact" ? "normal" : "compact")}>
+                          {invoiceReviewMode === "compact" ? "Full View" : "Compact View"}
+                        </button>
                       </div>
-                      <div style={styles.infoCardSubtext}>Tap a warning card to jump straight to the problem instead of scrolling through the whole invoice.</div>
+                    </div>
+
+                    <div style={{ ...styles.infoCard, marginTop: 10, border: "1px solid rgba(245, 158, 11, 0.36)", background: "rgba(245, 158, 11, 0.08)" }}>
+                      <div style={styles.infoCardTitle}>Tap A Trouble Spot</div>
+                      <div style={{ ...styles.formGrid, marginTop: 10 }}>
+                        <button type="button" style={{ ...styles.infoCard, textAlign: "left", cursor: "pointer", border: invoiceReviewWarningSummary.unknownRowsCount > 0 ? "1px solid rgba(245, 158, 11, 0.55)" : styles.infoCard?.border }} onClick={() => handleJumpToInvoiceFilter("unknown")}>
+                          <div style={styles.infoCardTitle}>Unknown Rows</div>
+                          <div style={{ ...styles.infoCardText, color: invoiceReviewWarningSummary.unknownRowsCount > 0 ? "#fde68a" : undefined }}>{invoiceReviewWarningSummary.unknownRowsCount}</div>
+                          <div style={styles.infoCardSubtext}>Tap to show category problems</div>
+                        </button>
+                        <button type="button" style={{ ...styles.infoCard, textAlign: "left", cursor: "pointer", border: invoiceReviewWarningSummary.unmatchedFoodCount > 0 ? "1px solid rgba(248, 113, 113, 0.55)" : styles.infoCard?.border }} onClick={() => handleJumpToInvoiceFilter("unmatched_food")}>
+                          <div style={styles.infoCardTitle}>Unmatched Food</div>
+                          <div style={{ ...styles.infoCardText, color: invoiceReviewWarningSummary.unmatchedFoodCount > 0 ? "#fecaca" : undefined }}>{invoiceReviewWarningSummary.unmatchedFoodCount}</div>
+                          <div style={styles.infoCardSubtext}>Tap to link food rows</div>
+                        </button>
+                        <button type="button" style={{ ...styles.infoCard, textAlign: "left", cursor: "pointer", border: invoiceReviewWarningSummary.priceWarningCount > 0 ? "1px solid rgba(248, 113, 113, 0.55)" : styles.infoCard?.border }} onClick={() => handleJumpToInvoiceFilter("price_warnings")}>
+                          <div style={styles.infoCardTitle}>Price Warnings</div>
+                          <div style={{ ...styles.infoCardText, color: invoiceReviewWarningSummary.priceWarningCount > 0 ? "#fca5a5" : undefined }}>{invoiceReviewWarningSummary.priceWarningCount}</div>
+                          <div style={styles.infoCardSubtext}>Tap to review price spikes</div>
+                        </button>
+                      </div>
+                      <div style={styles.infoCardSubtext}>These cards now jump straight to the problem rows — no more blind scrolling.</div>
                     </div>
 
                     <div style={{ ...styles.infoCard, marginTop: 10, border: "1px solid rgba(34, 197, 94, 0.28)", background: "rgba(34, 197, 94, 0.07)" }}>
@@ -1994,7 +2064,7 @@ export function InvoiceIntakeView(props: any) {
                         const supplierMatchLearningSaved = Boolean(savedSupplierMatchRows[String(row?.id || row?.supplierMatchKey || "")]);
 
                         return (
-                          <div key={row.id} style={getInvoiceRowReviewCardStyle(row)}>
+                          <div key={row.id} id={`invoice-row-${row.id}`} style={getInvoiceRowReviewCardStyle(row)}>
                             <div style={{ ...styles.buttonRow, alignItems: "center", justifyContent: "space-between" }}>
                               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                                 <span style={getInvoiceReviewBadgeStyle(row)}>{reviewState.label}</span>
@@ -2011,9 +2081,31 @@ export function InvoiceIntakeView(props: any) {
                                 <span style={styles.infoCardSubtext}>{reviewState.helper}</span>
                               ) : null}
                             </div>
-                            {!isCompactReviewMode ? (
+                            {isCompactReviewMode ? (
+                              <button
+                                type="button"
+                                style={{
+                                  ...styles.infoCard,
+                                  width: "100%",
+                                  textAlign: "left",
+                                  marginTop: 10,
+                                  border: "1px solid rgba(255,255,255,0.12)",
+                                  background: "rgba(15,23,42,0.72)",
+                                  cursor: "pointer",
+                                }}
+                                onClick={() => setInvoiceFixingRowId(isFixPanelOpen ? null : row.id)}
+                              >
+                                <div style={{ ...styles.infoCardTitle, fontSize: 16 }}>
+                                  {String(row.name || row.rawLine || "Unnamed invoice row").slice(0, 76)}
+                                </div>
+                                <div style={styles.infoCardSubtext}>
+                                  {String(row.qty || "?")} {String(row.unit || "unit")} · Unit {formatCurrency(row.unitPrice || 0)} · Total {formatCurrency(row.lineTotal || row.purchasePrice || 0)}
+                                </div>
+                                <div style={{ ...styles.infoCardSubtext, marginTop: 4 }}>Tap to open the row editor.</div>
+                              </button>
+                            ) : (
                               <div style={styles.infoCardSubtext}>Raw line: {String(row.rawLine || "")}</div>
-                            ) : null}
+                            )}
                             <div style={{ ...styles.buttonRow, alignItems: "center" }}>
                               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                                 {!isCompactReviewMode ? (
@@ -2138,11 +2230,13 @@ export function InvoiceIntakeView(props: any) {
                             </div>
                           ) : null}
 
-                          <label style={{ ...styles.label, display: "flex", alignItems: "center", gap: 8 }}>
-                            <input type="checkbox" checked={!!row.selected} onChange={(event: any) => updateSupplierInvoiceRow(row.id, "selected", event.target.checked)} />
-                            Use this line for review
-                          </label>
-                          <div style={styles.formGrid}>
+                          {(!isCompactReviewMode || isFixPanelOpen) ? (
+                            <>
+                              <label style={{ ...styles.label, display: "flex", alignItems: "center", gap: 8 }}>
+                                <input type="checkbox" checked={!!row.selected} onChange={(event: any) => updateSupplierInvoiceRow(row.id, "selected", event.target.checked)} />
+                                Use this line for review
+                              </label>
+                              <div style={styles.formGrid}>
                             <div style={styles.formGroup}>
                               <label style={styles.label}>Item Name</label>
                               <input value={row.name || ""} onChange={(event: any) => updateSupplierInvoiceRow(row.id, "name", event.target.value)} style={styles.input} />
@@ -2219,7 +2313,9 @@ export function InvoiceIntakeView(props: any) {
                                 )}
                               </div>
                             ) : null}
-                          </div>
+                              </div>
+                            </>
+                          ) : null}
                           </div>
                         );
                       })}

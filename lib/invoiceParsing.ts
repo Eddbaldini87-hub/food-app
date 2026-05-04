@@ -52,16 +52,71 @@ export function hasInvoiceMoneyValue(line: string) {
   return getInvoiceMoneyMatches(line).length > 0;
 }
 
+export function isInvoiceDocumentNoiseLine(line: string) {
+  const value = String(line || "").replace(/\s+/g, " ").trim();
+  const lower = value.toLowerCase();
+  if (!value) return true;
+
+  const noiseTerms = [
+    "abn", "tax invoice", "invoice no", "invoice number", "account", "customer", "deliver to", "delivery address",
+    "dispatch date", "order date", "payment", "remittance", "subtotal", "amount due", "balance due", "page",
+    "phone", "email", "www", "@", "terms", "statement", "bank", "bsb", "royal agricultural", "exclusive suppliers",
+    "jandakot", "perth metro", "biscayne way", "waroona hotel", "fouracre", "placing", "award", "awards"
+  ];
+
+  const matchedNoiseTerms = noiseTerms.filter((term) => lower.includes(term)).length;
+  const hasProductHeader = /product\s+description\s+ord\s+del\s+unit\s+price\s+total/i.test(value);
+
+  if (hasProductHeader) return false;
+  if (matchedNoiseTerms >= 2 && value.length > 90) return true;
+  if (matchedNoiseTerms >= 1 && !hasInvoiceMoneyValue(value) && value.length > 55) return true;
+  if (/^[\d\s:/.,-]+$/.test(value)) return true;
+
+  return false;
+}
+
+export function stripInvoiceDocumentNoisePrefix(line: string) {
+  let value = String(line || "").replace(/\s+/g, " ").trim();
+
+  value = value.replace(/^.*?PRODUCT\s+DESCRIPTION\s+ORD\s+DEL\s+UNIT\s+PRICE\s+TOTAL/i, "").trim();
+  value = value.replace(/^.*?DESCRIPTION\s+ORD\s+DEL\s+UNIT\s+PRICE\s+TOTAL/i, "").trim();
+
+  // Some OCR scans merge the entire supplier header into the first meat line.
+  // If a product code appears after a long address/header block, keep the code onward.
+  const productCodeMatch = value.match(/([A-Z]{1,4}\d{1,4}|B\d{2}|BEF?|P\d{2}|L\d{2})\s+[A-Z][A-Z0-9/#\s]{6,}/);
+  if (productCodeMatch && productCodeMatch.index !== undefined && productCodeMatch.index > 20) {
+    value = value.slice(productCodeMatch.index).trim();
+  }
+
+  return value;
+}
+
+export function isPlausibleInvoiceQuantity(quantity: any, unit: string) {
+  const qty = safeNumber(quantity);
+  const normalizedUnit = normalizeInvoiceUnit(unit);
+  if (!Number.isFinite(qty) || qty <= 0) return false;
+  if (["kg", "g", "l", "ml"].includes(normalizedUnit) && qty > 500) return false;
+  if (["each", "pack", "box", "carton", "case", "bag", "bunch", "tray", "tub", "tin"].includes(normalizedUnit) && qty > 1000) return false;
+  return true;
+}
+
 export function buildInvoiceCandidateLines(importText: string) {
   const rawLines = cleanInvoiceOcrText(importText)
     .split("\n")
-    .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
+    .map((line) => stripInvoiceDocumentNoisePrefix(line.replace(/\s+/g, " ").trim()))
+    .filter(Boolean)
+    .filter((line) => !isInvoiceDocumentNoiseLine(line));
 
   const candidates: string[] = [];
   let carry = "";
 
-  rawLines.forEach((line) => {
+  rawLines.forEach((sourceLine) => {
+    const line = stripInvoiceDocumentNoisePrefix(sourceLine);
+    if (isInvoiceDocumentNoiseLine(line)) {
+      carry = "";
+      return;
+    }
+
     const hasMoney = hasInvoiceMoneyValue(line);
     const hasLetters = /[a-zA-Z]/.test(line);
     const isObviousHeader = /\b(invoice|tax invoice|statement|customer|delivery address|account|abn|date|page|subtotal|amount due|balance due|payment|remittance|bank)\b/i.test(line);
@@ -178,7 +233,6 @@ export function parseInvoicePackDetails(text: string) {
 
 export const invoiceFoodWordSet = new Set([
   "beef", "pork", "lamb", "chicken", "duck", "turkey", "fish", "salmon", "tuna", "barramundi", "prawn", "prawns",
-  "breast", "boneless", "sirloin", "rump", "scotch", "porterhouse", "brisket", "chuck", "blade", "oyster", "striploin", "tenderloin", "fillet", "mince", "burger", "patty", "patties",
   "tomato", "tomatoes", "potato", "potatoes", "lettuce", "onion", "onions", "garlic", "mushroom", "mushrooms",
   "milk", "cream", "cheese", "butter", "yoghurt", "egg", "eggs", "oil", "vinegar", "sauce", "stock",
   "flour", "rice", "pasta", "bread", "bun", "buns", "roll", "rolls", "herbs", "parsley", "basil", "rocket",
@@ -282,7 +336,7 @@ export function classifyInvoiceItemCategory(rowOrName: any): InvoiceCategoryResu
     "fruit", "veg", "vegetable", "lettuce", "tomato", "tomatoes", "onion", "onions", "potato", "potatoes", "carrot", "broccoli", "broccolini",
     "herbs", "parsley", "basil", "rocket", "milk", "cream", "cheese", "butter", "dairy", "flour", "rice", "pasta", "oil", "vinegar",
     "sauce", "spices", "spice", "seasoning", "eggs", "egg", "bread", "buns", "bun", "frozen chips", "chips", "poultry", "meat",
-    "bacon", "ham", "sausage", "sausages", "mince", "steak", "brisket", "breast", "boneless", "sirloin", "rump", "scotch", "porterhouse", "tenderloin", "fillet", "burger", "patty", "patties", "mushroom", "mushrooms", "garlic", "avocado", "lemon", "lime",
+    "bacon", "ham", "sausage", "sausages", "mince", "steak", "brisket", "mushroom", "mushrooms", "garlic", "avocado", "lemon", "lime",
     "sugar", "salt", "pepper", "mozzarella", "parmesan", "ricotta", "feta", "yoghurt", "yogurt", "mayonnaise", "mustard", "stock"
   ];
 
@@ -981,10 +1035,10 @@ export function parseSupplierInvoiceText(importText: string, supplierName: strin
       const likelyFoodLine = /\b(bread|meat|fruit|veg|vegetable|dairy|cheese|milk|cream|oil|sauce|bun|panini|produce|chicken|beef|lamb|pork|fish|salmon|barramundi|tomato|potato|lettuce|onion|garlic|flour|rice|pasta|egg|butter|avocado|mushroom|broccoli|broccolini|carrot|cabbage|spinach|beans|peas|corn|prawn|squid|bacon|ham|sausage)\b/i.test(lowerLine);
       const likelyFeeLine = /\b(freight|delivery fee|fuel levy|surcharge|rounding|credit|deposit|gst only|admin fee)\b/i.test(lowerLine);
 
-      const obviousDocumentNoise = /(deliver to|delivery to|order date|dispatch date|invoice no|invoice number|abn|account|accounts@|phone|address|jandakot|waroona hotel|fouracre street|biscayne way|royal agricultural|exclusive suppliers)/i.test(lowerLine);
       if (likelyFeeLine) return null;
+      if (isInvoiceDocumentNoiseLine(line)) return null;
+      if (line.length > 180 && /(abn|deliver to|delivery address|dispatch date|order date|invoice no|phone|email|perth metro|jandakot|waroona|awards?)/i.test(lowerLine)) return null;
       if (headerOrTotalLine && !likelyFoodLine) return null;
-      if (obviousDocumentNoise && line.length > 120) return null;
 
       const moneyMatches = getInvoiceMoneyMatches(line);
       if (moneyMatches.length === 0) return null;
@@ -1003,8 +1057,9 @@ export function parseSupplierInvoiceText(importText: string, supplierName: strin
       const packDetails = parseInvoicePackDetails(rawNameArea);
       const qtyUnitMatch = rawNameArea.match(/\b(\d+(?:\.\d+)?)\s*(carton|ctn|box|case|pack|pk|kg|g|l|ml|each|ea|unit|units|bag|bunch|tray|tub|tin)\b/i);
       const packQtyMatch = rawNameArea.match(/\b(\d+(?:\.\d+)?)\s*(?:x|×)\s*\d+(?:\.\d+)?\s*(kg|g|l|ml|each|ea|pack|box|carton|bottle|bag|bunch|tray|tub|jar|tin|case|pk)\b/i);
-      const qty = packQtyMatch ? safeNumber(packQtyMatch[1]) : qtyUnitMatch ? safeNumber(qtyUnitMatch[1]) : 1;
+      const parsedQty = packQtyMatch ? safeNumber(packQtyMatch[1]) : qtyUnitMatch ? safeNumber(qtyUnitMatch[1]) : 1;
       const unit = normalizeInvoiceUnit(qtyUnitMatch?.[2] || (packQtyMatch ? "pack" : "each"));
+      const qty = isPlausibleInvoiceQuantity(parsedQty, unit) ? parsedQty : 1;
 
       const cleanedName = smartCleanIngredientName(cleanInvoiceItemName(rawNameArea));
       if (!hasUsableInvoiceName(cleanedName)) return null;
@@ -1038,140 +1093,6 @@ export function parseSupplierInvoiceText(importText: string, supplierName: strin
     })
     .filter(Boolean)
     .map((row: any) => attachInvoiceCogsClassification(row));
-}
-
-
-function looksLikeMeatSupplierInvoice(importText: string, supplierName: string) {
-  const supplier = normalizeLooseText(supplierName);
-  const source = normalizeLooseText(importText);
-  return /ryan|quality meat|quality meats|stirling ranges|butcher|meat|beef|gippsland|gipmeats/.test(supplier) || /ryan s quality meats|stirling ranges beef|butcher|meat|beef|boneless|sirloin|breast b l/.test(source);
-}
-
-function isMeatInvoiceNoiseLine(line: string) {
-  const lower = String(line || "").toLowerCase();
-  const strongNoise = /\b(invoice no|invoice number|tax invoice|delivery to|deliver to|order date|dispatch date|account|accounts@|abn|phone|www\.|email|customer|address|royal agricultural|exclusive suppliers|placing|jandakot|perth metro|waroona hotel|fouracre|biscayne way|terms|page)\b/i.test(lower);
-  const hasMeatProductCue = /\b(b\d{2}|be\b|bef\b|breast|boneless|sirloin|rump|scotch|porterhouse|mince|burger|steak|beef|lamb|pork|chicken)\b/i.test(lower);
-
-  if (strongNoise && !hasMeatProductCue) return true;
-  if (lower.length > 180 && strongNoise && !/\b(b\d{2}|be\b|bef\b)\b/i.test(lower)) return true;
-  return false;
-}
-
-function normaliseOcrMeatQuantity(rawQuantity: string, unit: string) {
-  let quantity = safeNumber(rawQuantity);
-  const normalizedUnit = normalizeInvoiceUnit(unit);
-
-  // Meat OCR often drops decimals: "887 KG" should usually be 8.87 kg, "314 KG" -> 3.14 kg.
-  if ((normalizedUnit === "kg" || normalizedUnit === "g") && /^\d{3,4}$/.test(String(rawQuantity || "").trim())) {
-    quantity = quantity / 100;
-  }
-
-  if (!Number.isFinite(quantity) || quantity <= 0) return 0;
-  if ((normalizedUnit === "kg" || normalizedUnit === "g") && quantity > 250) return 0;
-  return roundTo(quantity, 3);
-}
-
-function cleanMeatProductName(rawName: string) {
-  return smartCleanIngredientName(
-    cleanInvoiceItemName(
-      String(rawName || "")
-        .replace(/\b(product|description|ord|del|unit price|total|invoice|exclusive|suppliers?)\b/gi, " ")
-        .replace(/#[A-Z0-9]+\b/gi, " ")
-        .replace(/\b\d+\s*(?:x|ea|each|ctn|carton|pack|pk)\b/gi, " ")
-        .replace(/\b\d+(?:\.\d+)?\s*(?:kg|g)\b/gi, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-    )
-  );
-}
-
-function buildMeatRowFromMatch(match: RegExpMatchArray, rawLine: string, supplierName: string, index: number) {
-  const code = String(match[1] || "").trim();
-  const rawName = String(match[2] || "").trim();
-  const packAmount = String(match[3] || "").trim();
-  const packUnit = String(match[4] || "").trim();
-  const rawQuantity = String(match[5] || "").trim();
-  const rawUnit = String(match[6] || "kg").trim();
-  const lineTotal = safeNumber(match[7]);
-  const unit = normalizeInvoiceUnit(rawUnit);
-  const qty = normaliseOcrMeatQuantity(rawQuantity, unit);
-
-  if (!qty || lineTotal <= 0) return null;
-
-  const cleanedName = cleanMeatProductName(rawName);
-  if (!hasUsableInvoiceName(cleanedName)) return null;
-
-  const packDetails = parseInvoicePackDetails(`${packAmount || "1"} x ${rawQuantity} ${unit}`);
-  const unitPrice = qty > 0 ? roundTo(lineTotal / qty, 2) : lineTotal;
-
-  return attachInvoiceCogsClassification({
-    id: `invoice_meat_row_${Date.now()}_${index}_${Math.random().toString(36).slice(2, 5)}`,
-    code,
-    name: cleanedName,
-    qty,
-    unit,
-    unitPrice,
-    lineTotal,
-    selected: true,
-    rawLine,
-    supplierName,
-    purchasePrice: String(lineTotal),
-    purchaseUnit: unit === "kg" || unit === "g" ? "pack" : unit,
-    amountInPurchaseUnit: packAmount || packDetails.amountInPurchaseUnit || "1",
-    sizePerItem: packDetails.sizePerItem || String(qty),
-    sizeUnit: sizeUnitOptions.includes(unit) ? unit : "each",
-    confidence: "medium",
-    status: "needs_match",
-    linkedIngredientId: "",
-  });
-}
-
-export function parseMeatSupplierInvoiceRows(importText: string, supplierName: string) {
-  if (!looksLikeMeatSupplierInvoice(importText, supplierName)) return [];
-
-  const cleanedText = cleanInvoiceOcrText(importText)
-    .replace(/\bPRODUCT\s+DESCRIPTION\b/gi, " PRODUCT DESCRIPTION ")
-    .replace(/\bORD\s+DEL\s+UNIT\s+PRICE\s+TOTAL\b/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  const rows: any[] = [];
-  const seen = new Set<string>();
-
-  const productPattern = /\b([A-Z]{1,4}\d{0,3})\s+([A-Z][A-Z0-9\/'&(). -]{3,}?)\s+(?:(\d+(?:\.\d+)?)\s*(EA|EACH|CTN|CARTON|PACK|PK|BOX)\s+)?(\d+(?:\.\d+)?)\s*(KG|KGS|G|EA|EACH)\s+(\d{1,5}\.\d{2})\b/gi;
-  let match: RegExpMatchArray | null;
-
-  while ((match = productPattern.exec(cleanedText)) !== null) {
-    const rawLine = match[0];
-    if (isMeatInvoiceNoiseLine(rawLine)) continue;
-
-    const row = buildMeatRowFromMatch(match, rawLine, supplierName, rows.length);
-    if (!row) continue;
-
-    const key = `${String(row.code || "").toLowerCase()}_${String(row.name || "").toLowerCase()}_${row.qty}_${row.lineTotal}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    rows.push(row);
-  }
-
-  // Fallback line-by-line pass catches rows OCR kept on separate lines.
-  cleanInvoiceOcrText(importText)
-    .split("\n")
-    .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter(Boolean)
-    .forEach((line) => {
-      if (isMeatInvoiceNoiseLine(line)) return;
-      const lineMatch = line.match(/\b([A-Z]{1,4}\d{0,3})\s+([A-Z][A-Z0-9\/'&(). -]{3,}?)\s+(?:(\d+(?:\.\d+)?)\s*(EA|EACH|CTN|CARTON|PACK|PK|BOX)\s+)?(\d+(?:\.\d+)?)\s*(KG|KGS|G|EA|EACH)\s+(\d{1,5}\.\d{2})\b/i);
-      if (!lineMatch) return;
-      const row = buildMeatRowFromMatch(lineMatch, line, supplierName, rows.length);
-      if (!row) return;
-      const key = `${String(row.code || "").toLowerCase()}_${String(row.name || "").toLowerCase()}_${row.qty}_${row.lineTotal}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-      rows.push(row);
-    });
-
-  return rows;
 }
 
 
@@ -1274,11 +1195,6 @@ export function parseMblColumnInvoiceRows(importText: string, supplierName: stri
 }
 
 export function parseSupplierInvoiceTextSmart(importText: string, supplierName: string) {
-  const meatRows = parseMeatSupplierInvoiceRows(importText, supplierName);
-  if (meatRows.length >= 1) {
-    return meatRows;
-  }
-
   const mblRows = parseMblColumnInvoiceRows(importText, supplierName);
   if (mblRows.length >= 3) {
     return mblRows;
