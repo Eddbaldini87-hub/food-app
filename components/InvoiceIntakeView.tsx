@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { buildInvoiceCandidateLines, cleanInvoiceOcrText, parseSupplierInvoiceText, parseSupplierInvoiceTextSmart } from "../lib/invoiceParsing";
 
 export function InvoiceIntakeView(props: any) {
   const {
@@ -59,6 +60,7 @@ export function InvoiceIntakeView(props: any) {
     typeof window !== "undefined" && window.innerWidth <= 820 ? "compact" : "normal"
   );
   const [showInvoiceMatchDebug, setShowInvoiceMatchDebug] = useState(false);
+  const [showInvoiceAccuracyLab, setShowInvoiceAccuracyLab] = useState(false);
   const [savedSupplierMatchRows, setSavedSupplierMatchRows] = useState<Record<string, boolean>>({});
   const [trialModeNotes, setTrialModeNotes] = useState("");
   const invoiceReviewPanelRef = useRef<HTMLDivElement | null>(null);
@@ -75,6 +77,248 @@ export function InvoiceIntakeView(props: any) {
     window.addEventListener("resize", syncInvoiceMobileMode);
     return () => window.removeEventListener("resize", syncInvoiceMobileMode);
   }, []);
+
+
+  const selectedSupplierName = String(selectedSupplier?.name || invoiceIntakeMeta?.supplierName || "Unknown supplier").trim() || "Unknown supplier";
+
+  const getInvoiceAccuracyMoneyCount = (value: string) => {
+    const matches = String(value || "").match(/(?:\$\s*)?\d{1,6}(?:[.,]\d{2})\b/g);
+    return matches ? matches.length : 0;
+  };
+
+  const buildInvoicePriceAnchorRebuiltText = (value: string) => {
+    const sourceLines = cleanInvoiceOcrText(String(value || ""))
+      .split("\n")
+      .map((line: string) => line.replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+
+    const rebuiltLines: string[] = [];
+    const pricePattern = /(?:\$\s*)?\d{1,6}[.,]\d{2}\b/g;
+
+    sourceLines.forEach((line: string) => {
+      const matches = Array.from(line.matchAll(pricePattern));
+
+      if (matches.length <= 1) {
+        rebuiltLines.push(line);
+        return;
+      }
+
+      let cursor = 0;
+      matches.forEach((match: RegExpMatchArray) => {
+        const matchIndex = typeof match.index === "number" ? match.index : -1;
+        const rawMatch = match[0] || "";
+        if (matchIndex < 0 || !rawMatch) return;
+
+        const endIndex = matchIndex + rawMatch.length;
+        const segment = line.slice(cursor, endIndex).replace(/\s+/g, " ").trim();
+        if (segment) rebuiltLines.push(segment);
+        cursor = endIndex;
+      });
+
+      const tail = line.slice(cursor).replace(/\s+/g, " ").trim();
+      if (tail) {
+        const lastLine = rebuiltLines.pop() || "";
+        rebuiltLines.push(`${lastLine} ${tail}`.replace(/\s+/g, " ").trim());
+      }
+    });
+
+    return rebuiltLines.join("\n");
+  };
+
+  const getInvoiceAccuracyRowValue = (row: any) => {
+    const value = Number(row?.lineTotal ?? row?.total ?? row?.amount ?? row?.purchasePrice ?? row?.unitPrice ?? 0);
+    return Number.isFinite(value) ? value : 0;
+  };
+
+  const getInvoiceAccuracyConfidenceLabel = (row: any) => {
+    return String(row?.confidence || row?.rowConfidence || row?.categoryConfidence || row?.cogsCategoryConfidence || "low").toLowerCase();
+  };
+
+  const getInvoiceAccuracyCogsType = (row: any) => {
+    const rawType = String(row?.cogsType || row?.cogsCategory || row?.category || "unknown").toLowerCase();
+    if (rawType === "food" || rawType === "food_cogs") return "food_cogs";
+    if (rawType === "consumable" || rawType === "consumables" || rawType === "consumable_cogs") return "consumable_cogs";
+    if (rawType === "non_cogs" || rawType === "non-cogs" || rawType === "non cogs") return "non_cogs";
+    return "unknown";
+  };
+
+  const buildInvoiceAccuracyCandidateSummary = (candidateName: string, candidateText: string, parserMode: "standard" | "smart") => {
+    let rows: any[] = [];
+
+    try {
+      rows = parserMode === "smart"
+        ? parseSupplierInvoiceTextSmart(candidateText, selectedSupplierName)
+        : parseSupplierInvoiceText(candidateText, selectedSupplierName);
+    } catch (error) {
+      rows = [];
+    }
+
+    const rowCount = rows.length;
+    const rowsWithPrice = rows.filter((row: any) => getInvoiceAccuracyRowValue(row) > 0).length;
+    const rowsWithCategory = rows.filter((row: any) => getInvoiceAccuracyCogsType(row) !== "unknown").length;
+    const foodRows = rows.filter((row: any) => getInvoiceAccuracyCogsType(row) === "food_cogs").length;
+    const consumableRows = rows.filter((row: any) => getInvoiceAccuracyCogsType(row) === "consumable_cogs").length;
+    const unknownRows = rows.filter((row: any) => getInvoiceAccuracyCogsType(row) === "unknown").length;
+    const lowConfidenceRows = rows.filter((row: any) => getInvoiceAccuracyConfidenceLabel(row) === "low").length;
+    const estimatedTotal = rows.reduce((sum: number, row: any) => sum + getInvoiceAccuracyRowValue(row), 0);
+    const priceAnchorCount = getInvoiceAccuracyMoneyCount(candidateText);
+    const score = Math.round(
+      rowCount * 12 +
+      rowsWithPrice * 18 +
+      rowsWithCategory * 12 +
+      priceAnchorCount * 4 -
+      unknownRows * 10 -
+      lowConfidenceRows * 6
+    );
+
+    return {
+      candidateName,
+      parserMode,
+      rowCount,
+      rowsWithPrice,
+      rowsWithCategory,
+      foodRows,
+      consumableRows,
+      unknownRows,
+      lowConfidenceRows,
+      estimatedTotal,
+      priceAnchorCount,
+      score,
+      rows,
+    };
+  };
+
+  const invoiceAccuracyDiagnostics = useMemo(() => {
+    const rawText = String(supplierInvoiceText || "");
+    const cleanedText = cleanInvoiceOcrText(rawText);
+    const softLineText = buildInvoiceCandidateLines(rawText).join("\n");
+    const priceAnchorText = buildInvoicePriceAnchorRebuiltText(rawText);
+
+    const candidates = [
+      buildInvoiceAccuracyCandidateSummary("Original text", rawText, "standard"),
+      buildInvoiceAccuracyCandidateSummary("Cleaned OCR text", cleanedText, "standard"),
+      buildInvoiceAccuracyCandidateSummary("Soft line recovery", softLineText, "standard"),
+      buildInvoiceAccuracyCandidateSummary("Price-anchor rebuilt", priceAnchorText, "standard"),
+      buildInvoiceAccuracyCandidateSummary("Smart parser final", rawText, "smart"),
+    ].sort((a: any, b: any) => b.score - a.score);
+
+    const chosenCandidate = candidates[0] || null;
+    const currentRows = Array.isArray(supplierInvoiceRows) ? supplierInvoiceRows : [];
+    const currentRowSources = Array.from(
+      new Set(
+        currentRows
+          .map((row: any) => String(row?.recoverySource || row?.parserSource || row?.source || "").trim())
+          .filter(Boolean)
+      )
+    );
+    const finalParserSource = currentRowSources.length ? currentRowSources.join(", ") : String(chosenCandidate?.candidateName || "Not enough data yet");
+
+    const chosenReasons: string[] = [];
+    if (chosenCandidate) {
+      chosenReasons.push(`${chosenCandidate.rowCount} rows found`);
+      chosenReasons.push(`${chosenCandidate.rowsWithPrice} rows with prices`);
+      chosenReasons.push(`${chosenCandidate.rowsWithCategory} categorised rows`);
+      if (chosenCandidate.unknownRows > 0) chosenReasons.push(`${chosenCandidate.unknownRows} unknown rows still need eyes`);
+      if (chosenCandidate.estimatedTotal > 0) chosenReasons.push(`${formatCurrency(chosenCandidate.estimatedTotal)} estimated total`);
+    }
+
+    return {
+      rawText,
+      cleanedText,
+      softLineText,
+      priceAnchorText,
+      candidates,
+      chosenCandidate,
+      finalParserSource,
+      chosenReasons,
+    };
+  }, [supplierInvoiceText, supplierInvoiceRows, selectedSupplierName]);
+
+  const copyInvoiceAccuracyDebugPack = async () => {
+    const rows = Array.isArray(supplierInvoiceRows) ? supplierInvoiceRows : [];
+    const candidateSummary = invoiceAccuracyDiagnostics.candidates.map((candidate: any) => ({
+      candidateName: candidate.candidateName,
+      parserMode: candidate.parserMode,
+      rowCount: candidate.rowCount,
+      rowsWithPrice: candidate.rowsWithPrice,
+      rowsWithCategory: candidate.rowsWithCategory,
+      foodRows: candidate.foodRows,
+      consumableRows: candidate.consumableRows,
+      unknownRows: candidate.unknownRows,
+      lowConfidenceRows: candidate.lowConfidenceRows,
+      estimatedTotal: candidate.estimatedTotal,
+      priceAnchorCount: candidate.priceAnchorCount,
+      score: candidate.score,
+    }));
+
+    const parsedRows = rows.map((row: any) => ({
+      id: row?.id,
+      name: row?.name || row?.description || row?.itemName || "",
+      rawLine: row?.rawLine || "",
+      quantity: row?.quantity || row?.qty || "",
+      unit: row?.unit || row?.purchaseUnit || "",
+      unitPrice: row?.unitPrice || "",
+      lineTotal: row?.lineTotal || row?.purchasePrice || "",
+      cogsType: getInvoiceRowCogsType(row),
+      cogsCategory: row?.cogsCategory || row?.category || "",
+      cogsCategoryReason: row?.cogsCategoryReason || "",
+      confidence: row?.confidence || "",
+      matchConfidence: row?.matchConfidence || "",
+      matchedIngredientName: row?.matchedIngredientName || "",
+      linkedIngredientId: row?.linkedIngredientId || "",
+      supplierMatchKey: row?.supplierMatchKey || "",
+      recoverySource: row?.recoverySource || row?.parserSource || "",
+      status: row?.status || "",
+    }));
+
+    const debugPack = [
+      "GP POLICE INVOICE DEBUG PACK",
+      `Supplier: ${selectedSupplierName}`,
+      `Invoice number: ${String(invoiceIntakeMeta?.invoiceNumber || "")}`,
+      `Invoice date: ${String(invoiceIntakeMeta?.invoiceDate || "")}`,
+      `Row count: ${rows.length}`,
+      `Chosen parser source: ${invoiceAccuracyDiagnostics.finalParserSource}`,
+      `Warning message: ${String(invoiceQualityWarning || "")}`,
+      `Failed invoice notes: ${trialModeNotes}`,
+      "",
+      "CANDIDATE SUMMARY",
+      JSON.stringify(candidateSummary, null, 2),
+      "",
+      "RAW OCR TEXT",
+      invoiceAccuracyDiagnostics.rawText,
+      "",
+      "CLEANED OCR TEXT",
+      invoiceAccuracyDiagnostics.cleanedText,
+      "",
+      "SOFT LINE TEXT",
+      invoiceAccuracyDiagnostics.softLineText,
+      "",
+      "PRICE-ANCHOR REBUILT TEXT",
+      invoiceAccuracyDiagnostics.priceAnchorText,
+      "",
+      "PARSED ROWS",
+      JSON.stringify(parsedRows, null, 2),
+    ].join("\n");
+
+    try {
+      await navigator.clipboard.writeText(debugPack);
+      setSupplierInvoiceMessage("Invoice debug pack copied. Paste it into the next build/debug chat when an invoice fails.");
+    } catch (error) {
+      setSupplierInvoiceMessage("Could not copy debug pack automatically. Open the Accuracy Lab and copy the visible text manually.");
+    }
+  };
+
+  const getInvoiceAccuracyTextPreview = (value: string) => {
+    const text = String(value || "").trim();
+    return text || "No text available yet.";
+  };
+
+  const getInvoiceRowMergedWarning = (row: any) => {
+    const rawLine = String(row?.rawLine || row?.name || "");
+    const moneyCount = getInvoiceAccuracyMoneyCount(rawLine);
+    const wordCount = rawLine.split(/\s+/).filter(Boolean).length;
+    return moneyCount >= 2 || wordCount > 18;
+  };
 
   const getInvoiceRowCogsType = (row: any) => {
     const rawType = String(row?.cogsType || row?.cogsCategory || "unknown").toLowerCase();
@@ -1582,6 +1826,105 @@ export function InvoiceIntakeView(props: any) {
                 {invoiceDraftMessage ? <div style={styles.infoCardText}>{invoiceDraftMessage}</div> : null}
                 {invoiceDraft ? <div style={styles.infoCardSubtext}>Draft status: {String(invoiceDraft.status || "draft")} · Saved: {String(invoiceDraft.updatedAt || invoiceDraft.createdAt || "")}</div> : null}
 
+
+                <div style={{ ...styles.infoCard, border: showInvoiceAccuracyLab ? "1px solid rgba(96, 165, 250, 0.45)" : "1px solid rgba(255, 255, 255, 0.12)", background: showInvoiceAccuracyLab ? "rgba(59, 130, 246, 0.08)" : undefined }}>
+                  <div style={styles.sectionGroupHeaderRow}>
+                    <div>
+                      <div style={styles.infoCardTitle}>Invoice Accuracy Lab</div>
+                      <div style={styles.infoCardSubtext}>Diagnostic mode for ugly invoices. Normal kitchen users can leave this shut.</div>
+                    </div>
+                    <button type="button" style={showInvoiceAccuracyLab ? styles.primaryButton : styles.secondaryButton} onClick={() => setShowInvoiceAccuracyLab((previous) => !previous)}>
+                      {showInvoiceAccuracyLab ? "Hide Accuracy Lab" : "Show Accuracy Lab"}
+                    </button>
+                  </div>
+
+                  {showInvoiceAccuracyLab ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 12 }}>
+                      <div style={{ ...styles.infoCard, border: "1px solid rgba(245, 158, 11, 0.32)", background: "rgba(245, 158, 11, 0.08)" }}>
+                        <div style={styles.infoCardTitle}>Mixed Invoice Safety</div>
+                        <div style={styles.infoCardSubtext}>MBL can mix food and consumables. Classification is row-by-row, not whole-invoice.</div>
+                      </div>
+
+                      <div style={{ ...styles.formGrid, marginTop: 0 }}>
+                        <div style={styles.infoCard}>
+                          <div style={styles.infoCardTitle}>Chosen Parser Source</div>
+                          <div style={styles.infoCardText}>{invoiceAccuracyDiagnostics.finalParserSource}</div>
+                          <div style={styles.infoCardSubtext}>{invoiceAccuracyDiagnostics.chosenReasons.join(" · ") || "Scan or paste an invoice to compare parser candidates."}</div>
+                        </div>
+                        <div style={styles.infoCard}>
+                          <div style={styles.infoCardTitle}>Raw Price Anchors</div>
+                          <div style={styles.infoCardText}>{getInvoiceAccuracyMoneyCount(invoiceAccuracyDiagnostics.rawText)}</div>
+                          <div style={styles.infoCardSubtext}>Detected money values in raw OCR.</div>
+                        </div>
+                        <div style={styles.infoCard}>
+                          <div style={styles.infoCardTitle}>Current Rows</div>
+                          <div style={styles.infoCardText}>{Array.isArray(supplierInvoiceRows) ? supplierInvoiceRows.length : 0}</div>
+                          <div style={styles.infoCardSubtext}>Rows currently shown in review.</div>
+                        </div>
+                      </div>
+
+                      <div style={{ overflowX: "auto" }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+                          <thead>
+                            <tr>
+                              {["Candidate", "Rows", "Prices", "Categories", "Food", "Consumables", "Unknown", "Low", "Total", "Score"].map((heading) => (
+                                <th key={heading} style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid rgba(255,255,255,0.12)", color: "#e5e7eb", fontSize: 12 }}>{heading}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {invoiceAccuracyDiagnostics.candidates.map((candidate: any) => (
+                              <tr key={`${candidate.candidateName}_${candidate.parserMode}`}>
+                                <td style={{ padding: "8px", borderBottom: "1px solid rgba(255,255,255,0.08)", fontWeight: 800 }}>{candidate.candidateName}</td>
+                                <td style={{ padding: "8px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>{candidate.rowCount}</td>
+                                <td style={{ padding: "8px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>{candidate.rowsWithPrice}</td>
+                                <td style={{ padding: "8px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>{candidate.rowsWithCategory}</td>
+                                <td style={{ padding: "8px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>{candidate.foodRows}</td>
+                                <td style={{ padding: "8px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>{candidate.consumableRows}</td>
+                                <td style={{ padding: "8px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>{candidate.unknownRows}</td>
+                                <td style={{ padding: "8px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>{candidate.lowConfidenceRows}</td>
+                                <td style={{ padding: "8px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>{formatCurrency(candidate.estimatedTotal || 0)}</td>
+                                <td style={{ padding: "8px", borderBottom: "1px solid rgba(255,255,255,0.08)", fontWeight: 900 }}>{candidate.score}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div style={styles.formGrid}>
+                        {[
+                          ["Raw OCR Text", invoiceAccuracyDiagnostics.rawText],
+                          ["Cleaned OCR Text", invoiceAccuracyDiagnostics.cleanedText],
+                          ["Soft Line Break Candidate", invoiceAccuracyDiagnostics.softLineText],
+                          ["Price-Anchor Rebuilt Text", invoiceAccuracyDiagnostics.priceAnchorText],
+                        ].map(([label, value]: any) => (
+                          <div key={label} style={styles.formGroup}>
+                            <label style={styles.label}>{label}</label>
+                            <textarea readOnly value={getInvoiceAccuracyTextPreview(value)} style={{ ...styles.textarea, minHeight: 120, fontFamily: "monospace", fontSize: 12 }} />
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={styles.formGroup}>
+                        <label style={styles.label}>Failed Invoice Notes</label>
+                        <textarea
+                          value={trialModeNotes}
+                          onChange={(event: any) => setTrialModeNotes(event.target.value)}
+                          style={styles.textarea}
+                          placeholder="Supplier quirks, missing rows, wrong categories, OCR words it misread, and what needs fixing next."
+                        />
+                      </div>
+
+                      <div style={styles.buttonRow}>
+                        <button type="button" style={styles.primaryButton} onClick={copyInvoiceAccuracyDebugPack}>Copy Debug Pack</button>
+                        <button type="button" style={styles.secondaryButton} onClick={() => setShowInvoiceMatchDebug((previous) => !previous)}>
+                          {showInvoiceMatchDebug ? "Hide Match Debug" : "Show Match Debug Too"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
                 {invoiceLockSuccessReport ? (
                   <div style={{ ...styles.infoCard, border: "1px solid rgba(34, 197, 94, 0.45)", background: "rgba(34, 197, 94, 0.10)" }}>
                     <div style={styles.infoCardTitle}>✅ Invoice Lock Success Report</div>
@@ -2182,6 +2525,43 @@ export function InvoiceIntakeView(props: any) {
                               <span style={getInvoiceMatchConfidenceBadgeStyle(row)}>Match {String(row.matchConfidence || "low")}</span>
                             ) : null}
                           </div>
+                          {showInvoiceAccuracyLab ? (
+                            <div
+                              style={{
+                                ...styles.infoCard,
+                                marginTop: 10,
+                                border: "1px dashed rgba(96, 165, 250, 0.5)",
+                                background: "rgba(59, 130, 246, 0.08)",
+                              }}
+                            >
+                              <div style={styles.infoCardTitle}>Accuracy Lab Row Diagnostics</div>
+                              <div style={styles.infoCardSubtext}>Recovery source: {String(row?.recoverySource || row?.parserSource || "current review row")} · Clean key: {getInvoiceDebugCleanName(row)}</div>
+                              <div style={{ ...styles.buttonRow, marginTop: 8 }}>
+                                <span style={getInvoiceCogsCategoryBadgeStyle(row)}>{getInvoiceCogsCategoryLabel(row)}</span>
+                                <span style={getInvoiceReviewBadgeStyle(row)}>{getInvoiceRowReviewState(row).label}</span>
+                                {getInvoiceRowMergedWarning(row) ? <span style={{ ...getInvoiceReviewBadgeStyle({ cogsType: "unknown" }), color: "#fecaca" }}>Possible merged OCR row</span> : null}
+                              </div>
+                              <div style={{ ...styles.formGrid, marginTop: 10 }}>
+                                <div style={styles.formGroup}>
+                                  <label style={styles.label}>Raw Line</label>
+                                  <textarea value={String(row?.rawLine || "No raw line stored")} readOnly style={{ ...styles.textarea, minHeight: 80, fontFamily: "monospace", fontSize: 12 }} />
+                                </div>
+                                <div style={styles.formGroup}>
+                                  <label style={styles.label}>Category Reason</label>
+                                  <textarea value={String(row?.cogsCategoryReason || row?.categoryReason || getInvoiceCogsCategoryHelpText(row))} readOnly style={{ ...styles.textarea, minHeight: 80 }} />
+                                </div>
+                                <div style={styles.formGroup}>
+                                  <label style={styles.label}>Match Debug Reason</label>
+                                  <textarea value={String(row?.matchReason || row?.matchDebugReason || row?.supplierMatchKey || getInvoiceMatchLabel(row))} readOnly style={{ ...styles.textarea, minHeight: 80 }} />
+                                </div>
+                                <div style={styles.formGroup}>
+                                  <label style={styles.label}>Confidence Reason</label>
+                                  <textarea value={String(row?.confidenceReason || row?.rowConfidenceReason || getInvoiceRowReviewState(row).helper)} readOnly style={{ ...styles.textarea, minHeight: 80 }} />
+                                </div>
+                              </div>
+                            </div>
+                          ) : null}
+
                           {showInvoiceMatchDebug ? (
                             <div
                               style={{
