@@ -66,6 +66,8 @@ export function createPageRenderers(props: any) {
     setSupplierSearchTerm,
     filteredSupplierDirectory,
     setSelectedSupplierId,
+    editSupplier,
+    deleteSupplier,
     selectedSupplierEmailAddress,
     supplierEmailHref,
     selectedSupplierIngredients,
@@ -94,8 +96,6 @@ export function createPageRenderers(props: any) {
     clearPosSales,
     updatePosDishMatch,
     setActiveView,
-    editSupplier,
-    deleteSupplier,
   } = props;
 
 
