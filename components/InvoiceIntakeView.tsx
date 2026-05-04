@@ -846,6 +846,91 @@ export function InvoiceIntakeView(props: any) {
   };
 
 
+  const getInvoiceRowHasPriceWarning = (row: any) => {
+    const warningType = String(row?.warningType || row?.warning || row?.warningLabel || "").toLowerCase();
+    if (Boolean(row?.priceWarning || row?.hasPriceWarning)) return true;
+    if (warningType.includes("price")) return true;
+    return getInvoiceRowDamageFlags(row).some((flag: string) =>
+      flag.includes("Price rise") || flag.includes("Price spike") || flag.includes("Margin killer")
+    );
+  };
+
+  const getInvoiceRowHasDuplicateWarning = (row: any) => {
+    const warningType = String(row?.warningType || row?.warning || row?.warningLabel || row?.duplicateReason || "").toLowerCase();
+    const status = String(row?.status || row?.reviewStatus || "").toLowerCase();
+    return Boolean(row?.duplicateWarning || row?.isDuplicate || row?.possibleDuplicate || row?.duplicateInvoiceRow) || warningType.includes("duplicate") || status.includes("duplicate");
+  };
+
+  const getInvoiceRowHasMatchedIngredient = (row: any) => {
+    return Boolean(String(row?.linkedIngredientId || row?.matchedIngredientId || row?.ingredientId || "").trim() || String(row?.matchedIngredientName || "").trim());
+  };
+
+  const getInvoiceRowOutcome = (row: any) => {
+    const cogsType = getInvoiceRowCogsType(row);
+    const status = String(row?.status || row?.reviewStatus || "").toLowerCase();
+    const hasMatch = getInvoiceRowHasMatchedIngredient(row);
+
+    if (getInvoiceRowHasDuplicateWarning(row)) {
+      return { key: "duplicates", label: "DUPLICATE WARNING", tone: "danger" };
+    }
+
+    if (getInvoiceRowHasPriceWarning(row)) {
+      return { key: "price_warnings", label: "PRICE WARNING", tone: "danger" };
+    }
+
+    if (cogsType === "unknown" || status === "unknown" || status === "needs_fix" || (cogsType === "food_cogs" && !hasMatch && status !== "create_new" && status !== "ignore")) {
+      return { key: "needs_fix", label: "NEEDS FIX", tone: "warning" };
+    }
+
+    if (cogsType === "consumable_cogs") {
+      return { key: "consumable_cogs", label: "CONSUMABLE", tone: "info" };
+    }
+
+    if (cogsType === "food_cogs") {
+      return { key: "food_cogs", label: "FOOD COGS", tone: "success" };
+    }
+
+    if (cogsType === "non_cogs") {
+      return { key: "non_cogs", label: "NON-COGS", tone: "muted" };
+    }
+
+    return { key: "needs_fix", label: "NEEDS FIX", tone: "warning" };
+  };
+
+  const getInvoiceOutcomeBadgeStyle = (row: any): any => {
+    const outcome = getInvoiceRowOutcome(row);
+    const baseStyle = {
+      display: "inline-flex",
+      alignItems: "center",
+      borderRadius: 999,
+      padding: "6px 10px",
+      fontSize: 12,
+      fontWeight: 900,
+      letterSpacing: "0.03em",
+      border: "1px solid rgba(255, 255, 255, 0.16)",
+      whiteSpace: "nowrap",
+      textTransform: "uppercase" as const,
+    };
+
+    if (outcome.tone === "danger") {
+      return { ...baseStyle, background: "rgba(248, 113, 113, 0.18)", color: "#fecaca", borderColor: "rgba(248, 113, 113, 0.52)" };
+    }
+
+    if (outcome.tone === "warning") {
+      return { ...baseStyle, background: "rgba(245, 158, 11, 0.18)", color: "#fde68a", borderColor: "rgba(245, 158, 11, 0.48)" };
+    }
+
+    if (outcome.tone === "info") {
+      return { ...baseStyle, background: "rgba(59, 130, 246, 0.16)", color: "#bfdbfe", borderColor: "rgba(59, 130, 246, 0.42)" };
+    }
+
+    if (outcome.tone === "muted") {
+      return { ...baseStyle, background: "rgba(148, 163, 184, 0.14)", color: "#e2e8f0", borderColor: "rgba(148, 163, 184, 0.42)" };
+    }
+
+    return { ...baseStyle, background: "rgba(34, 197, 94, 0.16)", color: "#bbf7d0", borderColor: "rgba(34, 197, 94, 0.42)" };
+  };
+
   const getInvoiceMatchConfidenceBadgeStyle = (row: any): any => {
     const confidence = String(row?.matchConfidence || "low").toLowerCase();
     const baseStyle = {
@@ -1084,13 +1169,14 @@ export function InvoiceIntakeView(props: any) {
 
   const invoiceReviewFilterOptions = [
     { key: "all", label: "All" },
-    { key: "food_cogs", label: "Food COGS" },
+    { key: "food_cogs", label: "Food" },
     { key: "consumable_cogs", label: "Consumables" },
+    { key: "needs_fix", label: "Needs Fix" },
+    { key: "price_warnings", label: "Price Warnings" },
+    { key: "duplicates", label: "Duplicates" },
     { key: "non_cogs", label: "Non-COGS" },
     { key: "unknown", label: "Unknown" },
-    { key: "needs_fix", label: "Fix Only" },
     { key: "unmatched_food", label: "Unmatched Food" },
-    { key: "price_warnings", label: "Price Warnings" },
   ];
 
   const getInvoiceReviewFilterMatches = (row: any, filterKey: string) => {
@@ -1098,9 +1184,8 @@ export function InvoiceIntakeView(props: any) {
     const reviewState = getInvoiceRowReviewState(row);
     const linkedIngredientId = String(row?.linkedIngredientId || "").trim();
     const status = String(row?.status || "").toLowerCase();
-    const hasPriceWarning = getInvoiceRowDamageFlags(row).some((flag: string) =>
-      flag.includes("Price rise") || flag.includes("Price spike") || flag.includes("Margin killer")
-    );
+    const hasPriceWarning = getInvoiceRowHasPriceWarning(row);
+    const hasDuplicateWarning = getInvoiceRowHasDuplicateWarning(row);
 
     if (filterKey === "all") return true;
     if (filterKey === "food_cogs") return cogsType === "food_cogs";
@@ -1110,6 +1195,7 @@ export function InvoiceIntakeView(props: any) {
     if (filterKey === "needs_fix") return reviewState.level === "low" || cogsType === "unknown";
     if (filterKey === "unmatched_food") return cogsType === "food_cogs" && !linkedIngredientId && status !== "create_new";
     if (filterKey === "price_warnings") return hasPriceWarning;
+    if (filterKey === "duplicates") return hasDuplicateWarning;
 
     return true;
   };
@@ -1143,20 +1229,21 @@ export function InvoiceIntakeView(props: any) {
     { key: "consumables_first", label: "Consumables first" },
     { key: "unknown_first", label: "Unknown first" },
     { key: "price_warnings_first", label: "Price warnings first" },
+    { key: "duplicates_first", label: "Duplicates first" },
   ];
 
   const getInvoiceReviewSortScore = (row: any, sortKey: string) => {
     const cogsType = getInvoiceRowCogsType(row);
     const reviewState = getInvoiceRowReviewState(row);
-    const hasPriceWarning = getInvoiceRowDamageFlags(row).some((flag: string) =>
-      flag.includes("Price rise") || flag.includes("Price spike") || flag.includes("Margin killer")
-    );
+    const hasPriceWarning = getInvoiceRowHasPriceWarning(row);
+    const hasDuplicateWarning = getInvoiceRowHasDuplicateWarning(row);
 
     if (sortKey === "needs_fix_first") return reviewState.level === "low" || cogsType === "unknown" ? 0 : 1;
     if (sortKey === "food_first") return cogsType === "food_cogs" ? 0 : 1;
     if (sortKey === "consumables_first") return cogsType === "consumable_cogs" ? 0 : 1;
     if (sortKey === "unknown_first") return cogsType === "unknown" ? 0 : 1;
     if (sortKey === "price_warnings_first") return hasPriceWarning ? 0 : 1;
+    if (sortKey === "duplicates_first") return getInvoiceRowHasDuplicateWarning(row) ? 0 : 1;
 
     return 0;
   };
@@ -1193,6 +1280,34 @@ export function InvoiceIntakeView(props: any) {
   };
 
 
+  const invoiceReviewOutcomeSummary = (() => {
+    const rows = Array.isArray(supplierInvoiceRows) ? supplierInvoiceRows : [];
+
+    return rows.reduce(
+      (summary: any, row: any) => {
+        const outcome = getInvoiceRowOutcome(row);
+        const cogsType = getInvoiceRowCogsType(row);
+
+        summary.totalReviewRows += 1;
+        if (cogsType === "food_cogs") summary.matchedFoodCount += 1;
+        if (cogsType === "consumable_cogs") summary.matchedConsumableCount += 1;
+        if (outcome.key === "needs_fix") summary.unknownCount += 1;
+        if (outcome.key === "price_warnings") summary.priceWarningCount += 1;
+        if (outcome.key === "duplicates") summary.duplicateWarningCount += 1;
+
+        return summary;
+      },
+      {
+        totalReviewRows: 0,
+        matchedFoodCount: 0,
+        matchedConsumableCount: 0,
+        unknownCount: 0,
+        priceWarningCount: 0,
+        duplicateWarningCount: 0,
+      }
+    );
+  })();
+
   const invoiceReviewVisibilitySummary = (() => {
     const allRows = Array.isArray(supplierInvoiceRows) ? supplierInvoiceRows : [];
     const displayedRows = Array.isArray(displayedSupplierInvoiceRows) ? displayedSupplierInvoiceRows : [];
@@ -1213,15 +1328,14 @@ export function InvoiceIntakeView(props: any) {
         const cogsType = getInvoiceRowCogsType(row);
         const linkedIngredientId = String(row?.linkedIngredientId || "").trim();
         const status = String(row?.status || "").toLowerCase();
-        const hasPriceWarning = getInvoiceRowDamageFlags(row).some((flag: string) =>
-          flag.includes("Price rise") || flag.includes("Price spike") || flag.includes("Margin killer")
-        );
+        const hasPriceWarning = getInvoiceRowHasPriceWarning(row);
 
         if (cogsType === "unknown") summary.unknownRowsCount += 1;
         if (cogsType === "food_cogs" && !linkedIngredientId && status !== "create_new" && status !== "ignore") {
           summary.unmatchedFoodCount += 1;
         }
         if (hasPriceWarning) summary.priceWarningCount += 1;
+        if (getInvoiceRowHasDuplicateWarning(row)) summary.duplicateWarningCount += 1;
 
         return summary;
       },
@@ -1229,6 +1343,7 @@ export function InvoiceIntakeView(props: any) {
         unknownRowsCount: 0,
         unmatchedFoodCount: 0,
         priceWarningCount: 0,
+        duplicateWarningCount: 0,
       }
     );
   })();
@@ -1242,9 +1357,7 @@ export function InvoiceIntakeView(props: any) {
         const cogsType = getInvoiceRowCogsType(row);
         const linkedIngredientId = String(row?.linkedIngredientId || "").trim();
         const status = String(row?.status || "").toLowerCase();
-        const hasPriceWarning = getInvoiceRowDamageFlags(row).some((flag: string) =>
-          flag.includes("Price rise") || flag.includes("Price spike") || flag.includes("Margin killer")
-        );
+        const hasPriceWarning = getInvoiceRowHasPriceWarning(row);
 
         if (reviewState.level === "low" || cogsType === "unknown" || (cogsType === "food_cogs" && !linkedIngredientId && status !== "create_new" && status !== "ignore")) {
           summary.needsFixRowsCount += 1;
@@ -1349,6 +1462,8 @@ export function InvoiceIntakeView(props: any) {
       setInvoiceReviewSortKey("needs_fix_first");
     } else if (filterKey === "price_warnings") {
       setInvoiceReviewSortKey("price_warnings_first");
+    } else if (filterKey === "duplicates") {
+      setInvoiceReviewSortKey("duplicates_first");
     }
 
     window.setTimeout(() => {
@@ -1363,9 +1478,7 @@ export function InvoiceIntakeView(props: any) {
       const cogsType = getInvoiceRowCogsType(row);
       const linkedIngredientId = String(row?.linkedIngredientId || "").trim();
       const status = String(row?.status || "").toLowerCase();
-      const hasPriceWarning = getInvoiceRowDamageFlags(row).some((flag: string) =>
-        flag.includes("Price rise") || flag.includes("Price spike") || flag.includes("Margin killer")
-      );
+      const hasPriceWarning = getInvoiceRowHasPriceWarning(row);
 
       return (
         cogsType === "unknown" ||
@@ -1387,9 +1500,7 @@ export function InvoiceIntakeView(props: any) {
     const cogsType = getInvoiceRowCogsType(problemRow);
     const linkedIngredientId = String(problemRow?.linkedIngredientId || "").trim();
     const status = String(problemRow?.status || "").toLowerCase();
-    const hasPriceWarning = getInvoiceRowDamageFlags(problemRow).some((flag: string) =>
-      flag.includes("Price rise") || flag.includes("Price spike") || flag.includes("Margin killer")
-    );
+    const hasPriceWarning = getInvoiceRowHasPriceWarning(problemRow);
 
     if (cogsType === "unknown") {
       setInvoiceReviewFilter("unknown");
@@ -2196,6 +2307,37 @@ export function InvoiceIntakeView(props: any) {
                       </div>
                     </div>
 
+                    <div style={{ ...styles.infoCard, marginTop: 10, border: "1px solid rgba(59, 130, 246, 0.32)", background: "rgba(59, 130, 246, 0.08)" }}>
+                      <div style={styles.infoCardTitle}>Invoice Outcome Summary</div>
+                      <div style={styles.infoCardSubtext}>Every parsed row now lands in a clear review bucket. Display only — no invoice data is changed here.</div>
+                      <div style={{ ...styles.formGrid, marginTop: 10 }}>
+                        <div style={styles.infoCard}>
+                          <div style={styles.infoCardTitle}>Total Rows</div>
+                          <div style={styles.infoCardText}>{invoiceReviewOutcomeSummary.totalReviewRows}</div>
+                        </div>
+                        <div style={styles.infoCard}>
+                          <div style={styles.infoCardTitle}>Food COGS</div>
+                          <div style={{ ...styles.infoCardText, color: invoiceReviewOutcomeSummary.matchedFoodCount > 0 ? "#bbf7d0" : undefined }}>{invoiceReviewOutcomeSummary.matchedFoodCount}</div>
+                        </div>
+                        <div style={styles.infoCard}>
+                          <div style={styles.infoCardTitle}>Consumables</div>
+                          <div style={{ ...styles.infoCardText, color: invoiceReviewOutcomeSummary.matchedConsumableCount > 0 ? "#bfdbfe" : undefined }}>{invoiceReviewOutcomeSummary.matchedConsumableCount}</div>
+                        </div>
+                        <div style={styles.infoCard}>
+                          <div style={styles.infoCardTitle}>Needs Fix</div>
+                          <div style={{ ...styles.infoCardText, color: invoiceReviewOutcomeSummary.unknownCount > 0 ? "#fde68a" : undefined }}>{invoiceReviewOutcomeSummary.unknownCount}</div>
+                        </div>
+                        <div style={styles.infoCard}>
+                          <div style={styles.infoCardTitle}>Price Warnings</div>
+                          <div style={{ ...styles.infoCardText, color: invoiceReviewOutcomeSummary.priceWarningCount > 0 ? "#fca5a5" : undefined }}>{invoiceReviewOutcomeSummary.priceWarningCount}</div>
+                        </div>
+                        <div style={styles.infoCard}>
+                          <div style={styles.infoCardTitle}>Duplicate Warnings</div>
+                          <div style={{ ...styles.infoCardText, color: invoiceReviewOutcomeSummary.duplicateWarningCount > 0 ? "#fca5a5" : undefined }}>{invoiceReviewOutcomeSummary.duplicateWarningCount}</div>
+                        </div>
+                      </div>
+                    </div>
+
                     <div style={{ ...styles.infoCard, marginTop: 10, border: "1px solid rgba(245, 158, 11, 0.36)", background: "rgba(245, 158, 11, 0.08)" }}>
                       <div style={styles.infoCardTitle}>Tap A Trouble Spot</div>
                       <div style={{ ...styles.formGrid, marginTop: 10 }}>
@@ -2213,6 +2355,11 @@ export function InvoiceIntakeView(props: any) {
                           <div style={styles.infoCardTitle}>Price Warnings</div>
                           <div style={{ ...styles.infoCardText, color: invoiceReviewWarningSummary.priceWarningCount > 0 ? "#fca5a5" : undefined }}>{invoiceReviewWarningSummary.priceWarningCount}</div>
                           <div style={styles.infoCardSubtext}>Tap to review price spikes</div>
+                        </button>
+                        <button type="button" style={{ ...styles.infoCard, textAlign: "left", cursor: "pointer", border: invoiceReviewWarningSummary.duplicateWarningCount > 0 ? "1px solid rgba(248, 113, 113, 0.55)" : styles.infoCard?.border }} onClick={() => handleJumpToInvoiceFilter("duplicates")}>
+                          <div style={styles.infoCardTitle}>Duplicate Warnings</div>
+                          <div style={{ ...styles.infoCardText, color: invoiceReviewWarningSummary.duplicateWarningCount > 0 ? "#fca5a5" : undefined }}>{invoiceReviewWarningSummary.duplicateWarningCount}</div>
+                          <div style={styles.infoCardSubtext}>Tap to check possible double rows</div>
                         </button>
                       </div>
                       <div style={styles.infoCardSubtext}>These cards now jump straight to the problem rows — no more blind scrolling.</div>
@@ -2413,6 +2560,7 @@ export function InvoiceIntakeView(props: any) {
                           <div key={row.id} id={`invoice-row-${row.id}`} style={getInvoiceRowReviewCardStyle(row)}>
                             <div style={{ ...styles.buttonRow, alignItems: "center", justifyContent: "space-between" }}>
                               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                                <span style={getInvoiceOutcomeBadgeStyle(row)}>{getInvoiceRowOutcome(row).label}</span>
                                 <span style={getInvoiceReviewBadgeStyle(row)}>{reviewState.label}</span>
                                 <span style={getInvoiceCogsCategoryBadgeStyle(row)}>{getInvoiceCogsCategoryLabel(row)}</span>
                                 <span style={getInvoiceMatchBadgeStyle(row)}>{isLinked ? "Matched" : "Not Linked"}</span>
