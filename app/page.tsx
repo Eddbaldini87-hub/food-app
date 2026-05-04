@@ -5,23 +5,15 @@
 
 "use client";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
-import { Sidebar } from "../components/Sidebar";
-import { AppHeader } from "../components/AppHeader";
-import { RecipesListPage } from "../components/RecipesListPage";
-import { RecipeDetailPage } from "../components/RecipeDetailPage";
-import { RecipeBuilderPage } from "../components/RecipeBuilderPage";
-import { RecipePrepSheetPage } from "../components/RecipePrepSheetPage";
-import { InvoiceIntakeView } from "../components/InvoiceIntakeView";
 import { useInvoiceIntake } from "../hooks/useInvoiceIntake";
 import { usePosSales } from "../hooks/usePosSales";
 import { useBackup } from "../hooks/useBackup";
 import { useStockOrdering } from "../hooks/useStockOrdering";
-import { BackupPage } from "../components/BackupPage";
-import { VenueAdminPage } from "../components/VenueAdminPage";
-import { AuthPage } from "../components/AuthPage";
-import { ImportedRecipeReviewPage } from "../components/ImportedRecipeReviewPage";
-import { RecipeFolderPage } from "../components/RecipeFolderPage";
 import { createPageRenderers } from "../components/pageRenderers/PageRenderers";
+import { createRecipePageRenderers } from "../components/pageRenderers/RecipePageRenderers";
+import { createAdminPageRenderers } from "../components/pageRenderers/AdminPageRenderers";
+import { createMiscPageRenderers } from "../components/pageRenderers/MiscPageRenderers";
+import { AppShell } from "../components/AppShell";
 import {
   STORAGE_KEYS,
   INVOICE_SPEND_STORAGE_KEY,
@@ -41,8 +33,7 @@ import {
   supplierDayOptions,
   defaultIngredientForm,
   defaultRecipeForm,
-  defaultSupplierForm,
-  getGpPoliceNavItems
+  defaultSupplierForm
 } from "../lib/gpPoliceConstants";
 import {
   getVenueDisplayName,
@@ -2373,32 +2364,30 @@ export default function Page() {
     setVenueMessage("Admin locked. Venue controls are back in the safe.");
   };
 
-  const renderVenueSelector = () => (
-    <VenueAdminPage
-      styles={styles}
-      venueState={venueState}
-      venueMessage={venueMessage}
-      currentVenue={currentVenue}
-      adminUnlocked={adminUnlocked}
-      handleAdminUnlock={handleAdminUnlock}
-      handleAdminLock={handleAdminLock}
-      handleSwitchVenue={handleSwitchVenue}
-      handleCreateVenue={handleCreateVenue}
-      handleRenameCurrentVenue={handleRenameCurrentVenue}
-      handleDeleteCurrentVenue={handleDeleteCurrentVenue}
-      handleSaveVenueSnapshot={handleSaveVenueSnapshot}
-      getVenueDisplayName={getVenueDisplayName}
-      venueBackupInputRef={venueBackupInputRef}
-      handleDownloadVenueBackup={handleDownloadVenueBackup}
-      handleVenueBackupFileUpload={handleVenueBackupFileUpload}
-      restoreEmergencyBackup={restoreEmergencyBackup}
-      backupHistory={backupHistory}
-      restoreFromSnapshot={restoreFromSnapshot}
-      pendingVenueBackup={pendingVenueBackup}
-      handleRestoreBackupIntoCurrentVenue={handleRestoreBackupIntoCurrentVenue}
-      handleImportBackupAsNewVenue={handleImportBackupAsNewVenue}
-    />
-  );
+  const { renderVenueSelector } = createAdminPageRenderers({
+    styles,
+    venueState,
+    venueMessage,
+    currentVenue,
+    adminUnlocked,
+    handleAdminUnlock,
+    handleAdminLock,
+    handleSwitchVenue,
+    handleCreateVenue,
+    handleRenameCurrentVenue,
+    handleDeleteCurrentVenue,
+    handleSaveVenueSnapshot,
+    getVenueDisplayName,
+    venueBackupInputRef,
+    handleDownloadVenueBackup,
+    handleVenueBackupFileUpload,
+    restoreEmergencyBackup,
+    backupHistory,
+    restoreFromSnapshot,
+    pendingVenueBackup,
+    handleRestoreBackupIntoCurrentVenue,
+    handleImportBackupAsNewVenue,
+  });
 
   const getActiveViewLabel = () => {
     if (activeView === "dashboard") return "Main Hideout";
@@ -2417,60 +2406,6 @@ export default function Page() {
     if (activeView === "menu") return "Damage Report";
     return "GP Police App";
   };
-
-  const renderGpLogoFrame = (size = 86, borderRadius = 22) => (
-    <div
-      style={{
-        ...styles.logoFrame,
-        width: size,
-        height: size,
-        borderRadius,
-      }}
-    >
-      <img
-        src="/gp-police-logo-clean.png"
-        alt="GP Police"
-        style={styles.logoFrameImage}
-      />
-    </div>
-  );
-
-  const renderSidebar = () => (
-    <Sidebar
-      activeView={activeView}
-      isMobileViewport={isMobileViewport}
-      isMobileMenuOpen={isMobileMenuOpen}
-      navItems={(() => {
-        const navItems = getGpPoliceNavItems();
-        const stockNavItem = {
-          key: "stock",
-          label: "Stock",
-          description: "Stock control hub for ordering, counts, invoices, and spend.",
-          icon: "▣",
-        };
-        const stocktakeNavItem = {
-          key: "stocktake",
-          label: "Stocktake",
-          description: "Count stock without touching movements yet.",
-          icon: "▦",
-        };
-        const consumablesNavItem = {
-          key: "consumables",
-          label: "Consumables",
-          description: "Track packaging, napkins, gloves, and kitchen disposables outside food GP.",
-          icon: "◈",
-        };
-        const withStock = navItems.some((item: any) => item.key === "stock") ? navItems : [...navItems, stockNavItem];
-        const withStocktake = withStock.some((item: any) => item.key === "stocktake") ? withStock : [...withStock, stocktakeNavItem];
-        return withStocktake.some((item: any) => item.key === "consumables") ? withStocktake : [...withStocktake, consumablesNavItem];
-      })()}
-      styles={styles}
-      onNavigate={handleSidebarNavigation}
-      onCloseMobileMenu={() => setIsMobileMenuOpen(false)}
-    />
-  );
-
-
 
   const getLockedInvoiceRowCogsTypeForConsumables = (row: any) => {
     const rawType = String(row?.cogsType || row?.cogsCategory || "unknown").trim().toLowerCase();
@@ -2628,106 +2563,7 @@ export default function Page() {
     URL.revokeObjectURL(url);
   };
 
-  const renderConsumablesPage = () => (
-    <div style={styles.pageWrapper}>
-      <div style={styles.pageHeader}>
-        <div>
-          <h1 style={styles.pageTitle}>Consumables Tracking</h1>
-          <p style={styles.pageSubtitle}>Napkins, takeaway boxes, gloves, foil, bags, and packaging stay out of food GP and get tracked here.</p>
-        </div>
-        <button type="button" style={styles.secondaryButton} onClick={exportConsumablesCsv}>
-          Export Consumables CSV
-        </button>
-      </div>
 
-      <div style={styles.dashboardGrid}>
-        <div style={styles.metricCard}>
-          <div style={styles.metricLabel}>Total Consumables</div>
-          <div style={styles.metricValue}>{formatCurrency(consumablesTrackingReport.totalConsumablesSpend)}</div>
-        </div>
-        <div style={styles.metricCard}>
-          <div style={styles.metricLabel}>This Week</div>
-          <div style={styles.metricValue}>{formatCurrency(consumablesTrackingReport.thisWeekConsumablesSpend)}</div>
-        </div>
-        <div style={styles.metricCard}>
-          <div style={styles.metricLabel}>Last Week</div>
-          <div style={styles.metricValue}>{formatCurrency(consumablesTrackingReport.lastWeekConsumablesSpend)}</div>
-        </div>
-      </div>
-
-      <div style={styles.card}>
-        <div style={styles.dashboardSectionHeader}>
-          <div>
-            <h2 style={styles.sectionTitle}>Supplier Spend Ranking</h2>
-            <p style={styles.sectionSubtitle}>Consumable spend grouped by supplier from locked invoice history.</p>
-          </div>
-        </div>
-        {consumablesTrackingReport.supplierBreakdown.length === 0 ? (
-          <div style={styles.emptyState || styles.infoCardText}>No consumables tracked yet. Lock an invoice with consumable_cogs rows and they will appear here.</div>
-        ) : (
-          <div style={styles.infoGrid}>
-            {consumablesTrackingReport.supplierBreakdown.map((supplier: any) => (
-              <div key={supplier.supplierName} style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>{supplier.supplierName}</div>
-                <div style={styles.infoCardText}>{formatCurrency(supplier.total)}</div>
-                <div style={styles.infoCardSubtext}>{supplier.rowCount} consumable line{supplier.rowCount === 1 ? "" : "s"}</div>
-                <div style={styles.infoCardSubtext}>Last invoice: {supplier.lastInvoiceDate || "No date"}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div style={styles.card}>
-        <div style={styles.dashboardSectionHeader}>
-          <div>
-            <h2 style={styles.sectionTitle}>Category / Item Ranking</h2>
-            <p style={styles.sectionSubtitle}>Napkins, takeaway boxes, gloves, foil, packaging, and unknown consumables ranked by spend.</p>
-          </div>
-        </div>
-        {consumablesTrackingReport.itemBreakdown.length === 0 ? (
-          <div style={styles.emptyState || styles.infoCardText}>No consumable categories tracked yet.</div>
-        ) : (
-          <div style={styles.infoGrid}>
-            {consumablesTrackingReport.itemBreakdown.map((item: any) => (
-              <div key={item.itemCategory} style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>{item.itemCategory}</div>
-                <div style={styles.infoCardText}>{formatCurrency(item.total)}</div>
-                <div style={styles.infoCardSubtext}>{item.rowCount} line{item.rowCount === 1 ? "" : "s"}</div>
-                <div style={styles.infoCardSubtext}>Last invoice: {item.lastInvoiceDate || "No date"}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div style={styles.card}>
-        <div style={styles.dashboardSectionHeader}>
-          <div>
-            <h2 style={styles.sectionTitle}>Recent Consumable Lines</h2>
-            <p style={styles.sectionSubtitle}>Latest consumable rows preserved from locked invoice history.</p>
-          </div>
-        </div>
-        {consumablesTrackingReport.recentLines.length === 0 ? (
-          <div style={styles.emptyState || styles.infoCardText}>No consumable invoice lines found yet.</div>
-        ) : (
-          <div style={{ display: "grid", gap: 10 }}>
-            {consumablesTrackingReport.recentLines.map((row: any) => (
-              <div key={`${row.invoiceId}_${row.id}`} style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>{row.name}</div>
-                <div style={styles.infoCardText}>{formatCurrency(row.lineTotal)}</div>
-                <div style={styles.infoCardSubtext}>{row.itemCategory || row.category || "Unknown consumables"}</div>
-                <div style={styles.infoCardSubtext}>
-                  {row.date || "No date"} · {row.supplierName} · {row.invoiceNumber || "No invoice #"} · {row.qty || ""} {row.unit || ""}
-                </div>
-                {row.rawLine ? <div style={styles.infoCardSubtext}>Raw: {row.rawLine}</div> : null}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
 
   const getInvoiceConfidenceBadgeStyle = (confidence: string): CSSProperties => {
     if (confidence === "high") return { ...styles.statusBadge, background: "rgba(34, 197, 94, 0.18)", borderColor: "rgba(34, 197, 94, 0.45)", color: "#bbf7d0" };
@@ -2754,80 +2590,28 @@ export default function Page() {
     setSupplierInvoiceRows((previous: any[]) => previous.map((row: any) => ({ ...row, selected, status: selected && row.status === "ignore" ? "needs_match" : row.status })));
   };
 
-  const renderSupplierInvoiceImportPanel = () => (
-    <InvoiceIntakeView
-      styles={styles}
-      invoiceIntakeMeta={invoice.invoiceIntakeMeta}
-      setInvoiceIntakeMeta={invoice.setInvoiceIntakeMeta}
-      handleSupplierInvoiceFileUpload={invoice.handleSupplierInvoiceFileUpload}
-      invoiceCameraInputRef={invoiceCameraInputRef}
-      supplierInvoicePhotoName={invoice.supplierInvoicePhotoName}
-      supplierInvoicePhotoPreviewUrl={invoice.supplierInvoicePhotoPreviewUrl}
-      supplierInvoiceText={invoice.supplierInvoiceText}
-      setSupplierInvoiceText={invoice.setSupplierInvoiceText}
-      parseInvoiceForSelectedSupplier={invoice.parseInvoiceForSelectedSupplier}
-      handleSaveInvoiceDraft={invoice.handleSaveInvoiceDraft}
-      handleLoadInvoiceDraft={invoice.handleLoadInvoiceDraft}
-      handleDeleteInvoiceDraft={invoice.handleDeleteInvoiceDraft}
-      setSupplierInvoiceRows={invoice.setSupplierInvoiceRows}
-      setSupplierInvoiceMessage={invoice.setSupplierInvoiceMessage}
-      setInvoiceQualityWarning={invoice.setInvoiceQualityWarning}
-      setInvoiceFixingRowId={invoice.setInvoiceFixingRowId}
-      setInvoiceDraftMessage={invoice.setInvoiceDraftMessage}
-      setSupplierInvoicePhotoName={invoice.setSupplierInvoicePhotoName}
-      setSupplierInvoicePhotoPreviewUrl={invoice.setSupplierInvoicePhotoPreviewUrl}
-      supplierInvoiceMessage={invoice.supplierInvoiceMessage}
-      invoiceQualityWarning={invoice.invoiceQualityWarning}
-      invoiceDraftMessage={invoice.invoiceDraftMessage}
-      invoiceDraft={invoice.invoiceDraft}
-      invoiceLockSuccessReport={invoice.invoiceLockSuccessReport}
-      lockedInvoiceHistory={lockedInvoiceHistory}
-      formatCurrency={formatCurrency}
-      supplierInvoiceRows={invoice.supplierInvoiceRows}
-      invoiceLockSummary={invoice.invoiceLockSummary}
-      invoiceWeeklySummary={invoiceWeeklySummary}
-      damageHistory={damageHistory}
-      setAllSupplierInvoiceRowsSelected={invoice.setAllSupplierInvoiceRowsSelected}
-      updateSupplierInvoiceRow={invoice.updateSupplierInvoiceRow}
-      setSupplierInvoiceRowStatus={invoice.setSupplierInvoiceRowStatus}
-      invoiceFixingRowId={invoice.invoiceFixingRowId}
-      sizeUnitOptions={sizeUnitOptions}
-      componentUnitOptions={componentUnitOptions}
-      purchaseUnitOptions={purchaseUnitOptions}
-      supplierIngredients={supplierIngredients}
-      setSupplierIngredients={setSupplierIngredients}
-      selectedSupplier={selectedSupplier}
-      orderingMeta={orderingMeta}
-      getInvoiceStatusBadgeStyle={getInvoiceStatusBadgeStyle}
-      getInvoiceStatusLabel={getInvoiceStatusLabel}
-      getInvoiceConfidenceBadgeStyle={getInvoiceConfidenceBadgeStyle}
-      handleCreateIngredientFromInvoiceRow={invoice.handleCreateIngredientFromInvoiceRow}
-      handleSaveSupplierMatchMemory={invoice.handleSaveSupplierMatchMemory}
-      handleLockInvoiceIntoStock={invoice.handleLockInvoiceIntoStock}
-    />
-  );
+  const { renderConsumablesPage, renderSupplierInvoiceImportPanel } = createMiscPageRenderers({
+    styles,
+    exportConsumablesCsv,
+    consumablesTrackingReport,
+    formatCurrency,
+    invoice,
+    invoiceCameraInputRef,
+    lockedInvoiceHistory,
+    invoiceWeeklySummary,
+    damageHistory,
+    sizeUnitOptions,
+    componentUnitOptions,
+    purchaseUnitOptions,
+    supplierIngredients,
+    setSupplierIngredients,
+    selectedSupplier,
+    orderingMeta,
+    getInvoiceStatusBadgeStyle,
+    getInvoiceStatusLabel,
+    getInvoiceConfidenceBadgeStyle,
+  });
 
-
-  const renderRecipesListSection = (recipesToShow = filteredRecipes, showToolbar = true) => (
-    <RecipesListPage
-      styles={styles}
-      recipesToShow={recipesToShow}
-      showToolbar={showToolbar}
-      recipeTypeOptions={recipeTypeOptions}
-      recipeSearchTerm={recipeSearchTerm}
-      setRecipeSearchTerm={setRecipeSearchTerm}
-      recipeTypeFilter={recipeTypeFilter}
-      setRecipeTypeFilter={setRecipeTypeFilter}
-      startNewRecipe={startNewRecipe}
-      computedRecipes={computedRecipes}
-      formatCurrency={formatCurrency}
-      roundTo={roundTo}
-      formatDisplayCostPerUnit={formatDisplayCostPerUnit}
-      openRecipeView={openRecipeView}
-      editRecipe={editRecipe}
-      deleteRecipe={deleteRecipe}
-    />
-  );
 
   const buildRecipeDownloadText = (recipe: any, mode = "recipe") => {
     const lines = [
@@ -2872,149 +2656,79 @@ export default function Page() {
     URL.revokeObjectURL(url);
   };
 
-  const renderRecipeDetailSection = () => (
-    <RecipeDetailPage
-      styles={styles}
-      selectedRecipe={selectedRecipe}
-      setSelectedRecipeId={setSelectedRecipeId}
-      setSelectedRecipeView={setSelectedRecipeView}
-      setActiveView={setActiveView}
-      editRecipe={editRecipe}
-      downloadRecipeTextFile={downloadRecipeTextFile}
-      deleteRecipe={deleteRecipe}
-      roundTo={roundTo}
-      formatCurrency={formatCurrency}
-      formatDisplayCostPerUnit={formatDisplayCostPerUnit}
-      safeNumber={safeNumber}
-    />
-  );
+  const {
+    renderRecipesListSection,
+    renderRecipeDetailSection,
+    renderPrepSheetPage,
+    renderRecipesPage,
+    renderImportedRecipeReview,
+    renderRecipeBuilderPage,
+  } = createRecipePageRenderers({
+    styles,
+    filteredRecipes,
+    recipeTypeOptions,
+    recipeSearchTerm,
+    setRecipeSearchTerm,
+    recipeTypeFilter,
+    setRecipeTypeFilter,
+    startNewRecipe,
+    computedRecipes,
+    formatCurrency,
+    roundTo,
+    formatDisplayCostPerUnit,
+    openRecipeView,
+    editRecipe,
+    deleteRecipe,
+    selectedRecipe,
+    setSelectedRecipeId,
+    setSelectedRecipeView,
+    setActiveView,
+    downloadRecipeTextFile,
+    safeNumber,
+    handleSidebarNavigation,
+    currentRecipeFolder,
+    recipeFolderOptions,
+    setRecipeFolderView,
+    importedRecipeDraft,
+    recipeImportMessage,
+    setRecipeImportMessage,
+    saveImportedRecipeDraft,
+    clearImportedRecipeReview,
+    editImportedRecipeInFullForm,
+    updateImportedRecipeDraftField,
+    updateImportedRecipeDraftLine,
+    ignoreImportedRecipeDraftLine,
+    normalizeImportedRecipeType,
+    recipeYieldUnitOptions,
+    importedRecipeUnitOptions,
+    supplierIngredients,
+    orderingMeta,
+    recipeForm,
+    recipeImportFileInputRef,
+    handleRecipeImportFileUpload,
+    recipeImportText,
+    setRecipeImportText,
+    importRecipeFromText,
+    saveRecipe,
+    handleRecipeFormChange,
+    addRecipeComponent,
+    recipeIngredientSearchRef,
+    recipeIngredientSearch,
+    setRecipeIngredientSearch,
+    quickAddIngredientMatches,
+    getIngredientSummaryDisplay,
+    quickAddSupplierIngredientToRecipe,
+    ingredientLookup,
+    computedRecipeLookup,
+    getCompatibleUnitsForBase,
+    componentUnitOptions,
+    updateRecipeComponent,
+    buildComponentDetail,
+    removeRecipeComponent,
+    recipePreview,
+    clearRecipeForm,
+  });
 
-  const renderPrepSheetPage = () => (
-    <RecipePrepSheetPage
-      styles={styles}
-      selectedRecipe={selectedRecipe}
-      handleSidebarNavigation={handleSidebarNavigation}
-      setSelectedRecipeView={setSelectedRecipeView}
-      setActiveView={setActiveView}
-      downloadRecipeTextFile={downloadRecipeTextFile}
-      roundTo={roundTo}
-    />
-  );
-
-
-
-
-  const renderRecipesPage = () => {
-    if (currentRecipeFolder) {
-      const folderRecipes = currentRecipeFolder.getRecipes();
-
-      return (
-        <RecipeFolderPage
-          styles={styles}
-          recipeFolderOptions={recipeFolderOptions}
-          currentRecipeFolder={currentRecipeFolder}
-          setRecipeFolderView={setRecipeFolderView}
-          folderRecipes={folderRecipes}
-          renderRecipesListSection={renderRecipesListSection}
-        />
-      );
-    }
-
-    const recipeFolderSummaries = recipeFolderOptions.map((folder) => ({
-      ...folder,
-      folderCount: folder.getRecipes().length,
-    }));
-
-    return (
-      <RecipeFolderPage
-        styles={styles}
-        recipeFolderOptions={recipeFolderSummaries}
-        currentRecipeFolder={currentRecipeFolder}
-        setRecipeFolderView={setRecipeFolderView}
-        renderRecipesListSection={renderRecipesListSection}
-      />
-    );
-  };
-
-  const renderImportedRecipeReview = () => {
-    if (!importedRecipeDraft) return null;
-
-    const matchedCount = importedRecipeDraft.lines.filter((line: any) => line.status === "matched").length;
-    const ignoredCount = importedRecipeDraft.lines.filter((line: any) => line.status === "ignored").length;
-    const attentionCount = importedRecipeDraft.lines.filter((line: any) => line.status !== "matched" && line.status !== "ignored").length;
-    const activeLineCount = importedRecipeDraft.lines.length - ignoredCount;
-
-    return (
-      <ImportedRecipeReviewPage
-        styles={styles}
-        importedRecipeDraft={importedRecipeDraft}
-        recipeImportMessage={recipeImportMessage}
-        setRecipeImportMessage={setRecipeImportMessage}
-        handleImportRecipeConfirm={saveImportedRecipeDraft}
-        handleCancelImport={clearImportedRecipeReview}
-        formatCurrency={formatCurrency}
-        roundTo={roundTo}
-        matchedCount={matchedCount}
-        ignoredCount={ignoredCount}
-        attentionCount={attentionCount}
-        activeLineCount={activeLineCount}
-        saveImportedRecipeDraft={saveImportedRecipeDraft}
-        editImportedRecipeInFullForm={editImportedRecipeInFullForm}
-        clearImportedRecipeReview={clearImportedRecipeReview}
-        updateImportedRecipeDraftField={updateImportedRecipeDraftField}
-        updateImportedRecipeDraftLine={updateImportedRecipeDraftLine}
-        ignoreImportedRecipeDraftLine={ignoreImportedRecipeDraftLine}
-        normalizeImportedRecipeType={normalizeImportedRecipeType}
-        recipeYieldUnitOptions={recipeYieldUnitOptions}
-        importedRecipeUnitOptions={importedRecipeUnitOptions}
-        supplierIngredients={supplierIngredients}
-        orderingMeta={orderingMeta}
-      />
-    );
-  };
-
-  const renderRecipeBuilderPage = () => (
-    <RecipeBuilderPage
-      styles={styles}
-      computedRecipes={computedRecipes}
-      recipeForm={recipeForm}
-      setActiveView={setActiveView}
-      recipeImportFileInputRef={recipeImportFileInputRef}
-      handleRecipeImportFileUpload={handleRecipeImportFileUpload}
-      recipeImportMessage={recipeImportMessage}
-      recipeImportText={recipeImportText}
-      setRecipeImportText={setRecipeImportText}
-      importRecipeFromText={importRecipeFromText}
-      clearImportedRecipeReview={clearImportedRecipeReview}
-      renderImportedRecipeReview={renderImportedRecipeReview}
-      saveRecipe={saveRecipe}
-      handleRecipeFormChange={handleRecipeFormChange}
-      recipeTypeOptions={recipeTypeOptions}
-      recipeYieldUnitOptions={recipeYieldUnitOptions}
-      addRecipeComponent={addRecipeComponent}
-      recipeIngredientSearchRef={recipeIngredientSearchRef}
-      recipeIngredientSearch={recipeIngredientSearch}
-      setRecipeIngredientSearch={setRecipeIngredientSearch}
-      quickAddIngredientMatches={quickAddIngredientMatches}
-      orderingMeta={orderingMeta}
-      getIngredientSummaryDisplay={getIngredientSummaryDisplay}
-      quickAddSupplierIngredientToRecipe={quickAddSupplierIngredientToRecipe}
-      ingredientLookup={ingredientLookup}
-      computedRecipeLookup={computedRecipeLookup}
-      getCompatibleUnitsForBase={getCompatibleUnitsForBase}
-      componentUnitOptions={componentUnitOptions}
-      supplierIngredients={supplierIngredients}
-      updateRecipeComponent={updateRecipeComponent}
-      buildComponentDetail={buildComponentDetail}
-      removeRecipeComponent={removeRecipeComponent}
-      formatCurrency={formatCurrency}
-      recipePreview={recipePreview}
-      formatDisplayCostPerUnit={formatDisplayCostPerUnit}
-      roundTo={roundTo}
-      safeNumber={safeNumber}
-      clearRecipeForm={clearRecipeForm}
-    />
-  );
   const {
     renderDashboardPage,
     renderInvoicePage,
@@ -3139,73 +2853,30 @@ export default function Page() {
     return renderDashboardPage();
   };
 
-  if (!authenticated) {
-    return (
-      <AuthPage
-        styles={styles}
-        passwordInput={passwordInput}
-        setPasswordInput={setPasswordInput}
-        passwordError={passwordError}
-        setPasswordError={setPasswordError}
-        showPasswordInput={showPasswordInput}
-        setShowPasswordInput={setShowPasswordInput}
-        handleLogin={handlePasswordSubmit}
-        renderGpLogoFrame={renderGpLogoFrame}
-      />
-    );
-  }
-
   return (
-    <div
-      data-admin-unlocked={adminUnlocked ? "true" : "false"}
-      style={{
-        ...styles.appShell,
-        ...(isMobileViewport ? styles.appShellMobile : {}),
-      }}
-    >
-      <AppHeader
-        isMobileViewport={isMobileViewport}
-        isMobileMenuOpen={isMobileMenuOpen}
-        activeViewLabel={getActiveViewLabel()}
-        styles={styles}
-        onToggleMobileMenu={() => setIsMobileMenuOpen((previous: any) => !previous)}
-      />
-      {!isMobileViewport ? renderSidebar() : null}
-      {isMobileViewport ? renderSidebar() : null}
-      <div
-        style={{
-          ...styles.mainContent,
-          ...(isMobileViewport ? styles.mainContentMobile : {}),
-        }}
-      >
-        {renderVenueSelector()}
-        {renderActiveView()}
-      </div>
-      {isMobileViewport ? (
-        <div style={styles.mobileActionBar}>
-          <button
-            type="button"
-            style={{
-              ...styles.primaryButton,
-              ...styles.mobileActionButton,
-            }}
-            onClick={startNewRecipe}
-          >
-            Start Recipe
-          </button>
-          <button
-            type="button"
-            style={{
-              ...styles.secondaryButton,
-              ...styles.mobileActionButton,
-            }}
-            onClick={startNewSupplierLine}
-          >
-            Add Ingredient
-          </button>
-        </div>
-      ) : null}
-    </div>
+    <AppShell
+      styles={styles}
+      authenticated={authenticated}
+      adminUnlocked={adminUnlocked}
+      passwordInput={passwordInput}
+      setPasswordInput={setPasswordInput}
+      passwordError={passwordError}
+      setPasswordError={setPasswordError}
+      showPasswordInput={showPasswordInput}
+      setShowPasswordInput={setShowPasswordInput}
+      handleLogin={handlePasswordSubmit}
+      activeView={activeView}
+      activeViewLabel={getActiveViewLabel()}
+      isMobileViewport={isMobileViewport}
+      isMobileMenuOpen={isMobileMenuOpen}
+      onToggleMobileMenu={() => setIsMobileMenuOpen((previous: any) => !previous)}
+      onCloseMobileMenu={() => setIsMobileMenuOpen(false)}
+      onNavigate={handleSidebarNavigation}
+      renderVenueSelector={renderVenueSelector}
+      renderActiveView={renderActiveView}
+      startNewRecipe={startNewRecipe}
+      startNewSupplierLine={startNewSupplierLine}
+    />
   );
 }
 
