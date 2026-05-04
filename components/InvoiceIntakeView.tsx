@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { buildInvoiceCandidateLines, cleanInvoiceOcrText, parseSupplierInvoiceText, parseSupplierInvoiceTextSmart } from "../lib/invoiceParsing";
+import { buildInvoiceCandidateLines, cleanInvoiceOcrText, parseSupplierInvoiceText, parseSupplierInvoiceTextSmart, scoreInvoiceParserCandidate } from "../lib/invoiceParsing";
 
 export function InvoiceIntakeView(props: any) {
   const {
@@ -162,14 +162,8 @@ export function InvoiceIntakeView(props: any) {
     const lowConfidenceRows = rows.filter((row: any) => getInvoiceAccuracyConfidenceLabel(row) === "low").length;
     const estimatedTotal = rows.reduce((sum: number, row: any) => sum + getInvoiceAccuracyRowValue(row), 0);
     const priceAnchorCount = getInvoiceAccuracyMoneyCount(candidateText);
-    const score = Math.round(
-      rowCount * 12 +
-      rowsWithPrice * 18 +
-      rowsWithCategory * 12 +
-      priceAnchorCount * 4 -
-      unknownRows * 10 -
-      lowConfidenceRows * 6
-    );
+    const parserScore = scoreInvoiceParserCandidate(rows, candidateName);
+    const score = Math.round(parserScore.score + priceAnchorCount * 4);
 
     return {
       candidateName,
@@ -184,6 +178,8 @@ export function InvoiceIntakeView(props: any) {
       estimatedTotal,
       priceAnchorCount,
       score,
+      scoreReasons: parserScore.scoreReasons || [],
+      candidateStats: parserScore,
       rows,
     };
   };
@@ -249,6 +245,7 @@ export function InvoiceIntakeView(props: any) {
       estimatedTotal: candidate.estimatedTotal,
       priceAnchorCount: candidate.priceAnchorCount,
       score: candidate.score,
+      scoreReasons: candidate.scoreReasons || [],
     }));
 
     const parsedRows = rows.map((row: any) => ({
@@ -268,6 +265,12 @@ export function InvoiceIntakeView(props: any) {
       linkedIngredientId: row?.linkedIngredientId || "",
       supplierMatchKey: row?.supplierMatchKey || "",
       recoverySource: row?.recoverySource || row?.parserSource || "",
+      rowShape: row?.rowShape || "",
+      rowShapeConfidence: row?.rowShapeConfidence || "",
+      rowShapeReason: row?.rowShapeReason || "",
+      suspectedMergedRow: Boolean(row?.suspectedMergedRow),
+      parserScoreContribution: row?.parserScoreContribution ?? "",
+      parserScoreReasons: row?.parserScoreReasons || [],
       status: row?.status || "",
     }));
 
@@ -2536,15 +2539,24 @@ export function InvoiceIntakeView(props: any) {
                             >
                               <div style={styles.infoCardTitle}>Accuracy Lab Row Diagnostics</div>
                               <div style={styles.infoCardSubtext}>Recovery source: {String(row?.recoverySource || row?.parserSource || "current review row")} · Clean key: {getInvoiceDebugCleanName(row)}</div>
+                              <div style={styles.infoCardSubtext}>Row shape: {String(row?.rowShape || "not scored")} · Shape confidence: {String(row?.rowShapeConfidence || "unknown")} · Parser score: {String(row?.parserScoreContribution ?? "n/a")}</div>
                               <div style={{ ...styles.buttonRow, marginTop: 8 }}>
                                 <span style={getInvoiceCogsCategoryBadgeStyle(row)}>{getInvoiceCogsCategoryLabel(row)}</span>
                                 <span style={getInvoiceReviewBadgeStyle(row)}>{getInvoiceRowReviewState(row).label}</span>
-                                {getInvoiceRowMergedWarning(row) ? <span style={{ ...getInvoiceReviewBadgeStyle({ cogsType: "unknown" }), color: "#fecaca" }}>Possible merged OCR row</span> : null}
+                                {(row?.suspectedMergedRow || getInvoiceRowMergedWarning(row)) ? <span style={{ ...getInvoiceReviewBadgeStyle({ cogsType: "unknown" }), color: "#fecaca" }}>Possible merged OCR row</span> : null}
                               </div>
                               <div style={{ ...styles.formGrid, marginTop: 10 }}>
                                 <div style={styles.formGroup}>
                                   <label style={styles.label}>Raw Line</label>
                                   <textarea value={String(row?.rawLine || "No raw line stored")} readOnly style={{ ...styles.textarea, minHeight: 80, fontFamily: "monospace", fontSize: 12 }} />
+                                </div>
+                                <div style={styles.formGroup}>
+                                  <label style={styles.label}>Row Shape Reason</label>
+                                  <textarea value={String(row?.rowShapeReason || "No row shape diagnostics stored")} readOnly style={{ ...styles.textarea, minHeight: 80 }} />
+                                </div>
+                                <div style={styles.formGroup}>
+                                  <label style={styles.label}>Parser Score Reasons</label>
+                                  <textarea value={Array.isArray(row?.parserScoreReasons) ? row.parserScoreReasons.join("\n") : String(row?.parserScoreReasons || "No parser score reasons stored")} readOnly style={{ ...styles.textarea, minHeight: 80 }} />
                                 </div>
                                 <div style={styles.formGroup}>
                                   <label style={styles.label}>Category Reason</label>

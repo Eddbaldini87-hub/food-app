@@ -100,6 +100,257 @@ export function isPlausibleInvoiceQuantity(quantity: any, unit: string) {
   return true;
 }
 
+
+export type InvoiceRowShapeName =
+  | "code_name_qty_unit_price"
+  | "name_qty_unit_price"
+  | "name_unit_price"
+  | "name_price_only"
+  | "merged_multi_price"
+  | "unknown_shape";
+
+export type InvoiceRowShapeResult = {
+  rowShape: InvoiceRowShapeName;
+  rowShapeConfidence: "low" | "medium" | "high";
+  rowShapeReason: string;
+  suspectedMergedRow: boolean;
+};
+
+export function splitInvoiceLineByPriceAnchors(line: string) {
+  const source = String(line || "").replace(/\s+/g, " ").trim();
+  if (!source) return [];
+
+  const moneyMatches = getInvoiceMoneyMatches(source);
+  if (moneyMatches.length <= 1) return [source];
+
+  const segments: string[] = [];
+  let cursor = 0;
+
+  moneyMatches.forEach((match) => {
+    const endIndex = match.index + String(match.raw || "").length;
+    const segment = source.slice(cursor, endIndex).replace(/\s+/g, " ").trim();
+    if (segment && /[a-zA-Z]/.test(segment)) {
+      segments.push(segment);
+    }
+    cursor = endIndex;
+  });
+
+  const tail = source.slice(cursor).replace(/\s+/g, " ").trim();
+  if (tail && segments.length) {
+    const last = segments.pop() || "";
+    segments.push(`${last} ${tail}`.replace(/\s+/g, " ").trim());
+  }
+
+  return segments.length > 1 ? segments : [source];
+}
+
+export function detectInvoiceRowShape(rowOrLine: any): InvoiceRowShapeResult {
+  const rawLine = typeof rowOrLine === "string"
+    ? rowOrLine
+    : String(rowOrLine?.rawLine || rowOrLine?.name || rowOrLine?.description || "");
+  const source = String(rawLine || "").replace(/\s+/g, " ").trim();
+  const name = typeof rowOrLine === "string" ? source : String(rowOrLine?.name || rowOrLine?.description || "").trim();
+  const code = typeof rowOrLine === "string" ? "" : String(rowOrLine?.code || rowOrLine?.supplierCode || rowOrLine?.productCode || "").trim();
+  const unit = typeof rowOrLine === "string" ? "" : normalizeInvoiceUnit(String(rowOrLine?.unit || rowOrLine?.purchaseUnit || ""));
+  const qty = typeof rowOrLine === "string" ? 0 : safeNumber(rowOrLine?.qty ?? rowOrLine?.quantity ?? rowOrLine?.amountInPurchaseUnit);
+  const moneyMatches = getInvoiceMoneyMatches(source);
+  const hasPrice = moneyMatches.length > 0 || (typeof rowOrLine !== "string" && safeNumber(rowOrLine?.lineTotal ?? rowOrLine?.unitPrice ?? rowOrLine?.purchasePrice) > 0);
+  const hasUnit = Boolean(unit && unit !== "each") || /\b(carton|ctn|box|case|pack|pk|kg|g|l|ml|each|ea|bag|bunch|tray|tub|tin)\b/i.test(source);
+  const hasQty = qty > 0 || /\b\d+(?:\.\d+)?\s*(carton|ctn|box|case|pack|pk|kg|g|l|ml|each|ea|bag|bunch|tray|tub|tin)\b/i.test(source);
+  const hasCode = Boolean(code) || /^\s*[A-Z]{1,4}\d{2,}\b/i.test(source) || /^\s*\d{4,}\b/.test(source);
+  const wordCount = source.split(/\s+/).filter(Boolean).length;
+  const repeatedUnits = (source.match(/\b(carton|ctn|box|case|pack|pk|kg|g|l|ml|each|ea|bag|bunch|tray|tub|tin)\b/gi) || []).length;
+  const suspectedMergedRow = moneyMatches.length >= 2 || (wordCount >= 22 && repeatedUnits >= 2) || (wordCount >= 28 && hasPrice);
+
+  if (suspectedMergedRow) {
+    return {
+      rowShape: "merged_multi_price",
+      rowShapeConfidence: moneyMatches.length >= 2 ? "high" : "medium",
+      rowShapeReason: moneyMatches.length >= 2
+        ? `${moneyMatches.length} price anchors were found in one OCR line.`
+        : "The OCR line is long with repeated unit/product patterns.",
+      suspectedMergedRow: true,
+    };
+  }
+
+  if (hasCode && name && hasQty && hasUnit && hasPrice) {
+    return {
+      rowShape: "code_name_qty_unit_price",
+      rowShapeConfidence: "high",
+      rowShapeReason: "Supplier code, product name, quantity/unit, and price were all detected.",
+      suspectedMergedRow: false,
+    };
+  }
+
+  if (name && hasQty && hasUnit && hasPrice) {
+    return {
+      rowShape: "name_qty_unit_price",
+      rowShapeConfidence: "high",
+      rowShapeReason: "Product name, quantity/unit, and price were detected.",
+      suspectedMergedRow: false,
+    };
+  }
+
+  if (name && hasUnit && hasPrice) {
+    return {
+      rowShape: "name_unit_price",
+      rowShapeConfidence: "medium",
+      rowShapeReason: "Product name, unit, and price were detected, but quantity may need review.",
+      suspectedMergedRow: false,
+    };
+  }
+
+  if (name && hasPrice) {
+    return {
+      rowShape: "name_price_only",
+      rowShapeConfidence: "medium",
+      rowShapeReason: "Product name and price were detected, but unit/quantity are unclear.",
+      suspectedMergedRow: false,
+    };
+  }
+
+  return {
+    rowShape: "unknown_shape",
+    rowShapeConfidence: "low",
+    rowShapeReason: "GP Police could not confidently identify a stable invoice row structure.",
+    suspectedMergedRow: false,
+  };
+}
+
+export function getInvoiceRowParserScoreContribution(row: any) {
+  const shape = detectInvoiceRowShape(row);
+  const cogsType = normalizeLegacyInvoiceCogsType(row?.cogsType || row?.cogsCategory);
+  const hasPrice = safeNumber(row?.lineTotal ?? row?.total ?? row?.amount ?? row?.purchasePrice ?? row?.unitPrice) > 0;
+  const hasName = hasUsableInvoiceName(String(row?.name || row?.description || row?.rawLine || ""));
+  const hasUnit = Boolean(String(row?.unit || row?.purchaseUnit || "").trim());
+  const confidence = String(row?.confidence || row?.rowConfidence || "low").toLowerCase();
+  let score = 0;
+  const reasons: string[] = [];
+
+  if (hasName) {
+    score += 10;
+    reasons.push("+10 product name");
+  } else {
+    score -= 12;
+    reasons.push("-12 missing product name");
+  }
+
+  if (hasPrice) {
+    score += 16;
+    reasons.push("+16 price found");
+  } else {
+    score -= 18;
+    reasons.push("-18 missing price");
+  }
+
+  if (hasUnit) {
+    score += 7;
+    reasons.push("+7 unit found");
+  }
+
+  if (cogsType !== "unknown") {
+    score += 8;
+    reasons.push("+8 category found");
+  } else {
+    score -= 8;
+    reasons.push("-8 unknown category");
+  }
+
+  if (shape.rowShapeConfidence === "high") {
+    score += 8;
+    reasons.push("+8 strong row shape");
+  } else if (shape.rowShapeConfidence === "medium") {
+    score += 3;
+    reasons.push("+3 partial row shape");
+  } else {
+    score -= 5;
+    reasons.push("-5 weak row shape");
+  }
+
+  if (confidence === "high" || confidence === "learned") {
+    score += 6;
+    reasons.push("+6 high confidence");
+  } else if (confidence === "low") {
+    score -= 4;
+    reasons.push("-4 low confidence");
+  }
+
+  if (shape.suspectedMergedRow) {
+    score -= 20;
+    reasons.push("-20 suspected merged OCR row");
+  }
+
+  return {
+    parserScoreContribution: score,
+    parserScoreReasons: reasons,
+  };
+}
+
+export function scoreInvoiceParserCandidate(rows: any[], candidateName = "Parser candidate") {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const stats = safeRows.reduce(
+    (summary: any, row: any) => {
+      const rowScore = getInvoiceRowParserScoreContribution(row);
+      const cogsType = normalizeLegacyInvoiceCogsType(row?.cogsType || row?.cogsCategory);
+      const shape = detectInvoiceRowShape(row);
+      const lineValue = safeNumber(row?.lineTotal ?? row?.total ?? row?.amount ?? row?.purchasePrice ?? row?.unitPrice);
+
+      summary.rowCount += 1;
+      summary.score += rowScore.parserScoreContribution;
+      summary.estimatedTotal += lineValue;
+      if (lineValue > 0) summary.rowsWithPrice += 1;
+      if (String(row?.unit || row?.purchaseUnit || "").trim()) summary.rowsWithValidUnit += 1;
+      if (cogsType !== "unknown") summary.rowsWithCategory += 1;
+      if (cogsType === "food_cogs") summary.foodRows += 1;
+      if (cogsType === "consumable_cogs") summary.consumableRows += 1;
+      if (cogsType === "unknown") summary.unknownRows += 1;
+      if (String(row?.confidence || "low").toLowerCase() === "low") summary.lowConfidenceRows += 1;
+      if (shape.suspectedMergedRow) summary.suspectedMergedRows += 1;
+      if (!lineValue) summary.missingPriceRows += 1;
+      summary.scoreReasons.push(`${String(row?.name || row?.rawLine || "row").slice(0, 42)}: ${rowScore.parserScoreReasons.join(", ")}`);
+      return summary;
+    },
+    {
+      candidateName,
+      rowCount: 0,
+      rowsWithPrice: 0,
+      rowsWithValidUnit: 0,
+      rowsWithCategory: 0,
+      foodRows: 0,
+      consumableRows: 0,
+      unknownRows: 0,
+      lowConfidenceRows: 0,
+      suspectedMergedRows: 0,
+      missingPriceRows: 0,
+      estimatedTotal: 0,
+      score: 0,
+      scoreReasons: [] as string[],
+    }
+  );
+
+  stats.score += stats.rowCount * 5 + stats.rowsWithPrice * 7 + stats.rowsWithValidUnit * 4 + stats.rowsWithCategory * 4;
+  stats.score -= stats.unknownRows * 7 + stats.lowConfidenceRows * 4 + stats.suspectedMergedRows * 14 + stats.missingPriceRows * 10;
+
+  return stats;
+}
+
+export function enrichInvoiceRowParserDiagnostics(row: any) {
+  const shape = detectInvoiceRowShape(row);
+  const score = getInvoiceRowParserScoreContribution(row);
+  const confidenceReason = row?.confidenceReason || [shape.rowShapeReason, ...(score.parserScoreReasons || [])].filter(Boolean).join(" · ");
+
+  return {
+    ...row,
+    rowShape: row?.rowShape || shape.rowShape,
+    rowShapeConfidence: row?.rowShapeConfidence || shape.rowShapeConfidence,
+    rowShapeReason: row?.rowShapeReason || shape.rowShapeReason,
+    suspectedMergedRow: row?.suspectedMergedRow ?? shape.suspectedMergedRow,
+    parserScoreContribution: row?.parserScoreContribution ?? score.parserScoreContribution,
+    parserScoreReasons: row?.parserScoreReasons || score.parserScoreReasons,
+    confidenceReason,
+  };
+}
+
 export function buildInvoiceCandidateLines(importText: string) {
   const rawLines = cleanInvoiceOcrText(importText)
     .split("\n")
@@ -107,10 +358,12 @@ export function buildInvoiceCandidateLines(importText: string) {
     .filter(Boolean)
     .filter((line) => !isInvoiceDocumentNoiseLine(line));
 
+  const sourceRawLines = rawLines.flatMap((line) => splitInvoiceLineByPriceAnchors(line));
+
   const candidates: string[] = [];
   let carry = "";
 
-  rawLines.forEach((sourceLine) => {
+  sourceRawLines.forEach((sourceLine) => {
     const line = stripInvoiceDocumentNoisePrefix(sourceLine);
     if (isInvoiceDocumentNoiseLine(line)) {
       carry = "";
@@ -893,8 +1146,17 @@ export function enhanceInvoiceReviewRows(rows: any[], supplierIngredients: any[]
         ? `No safe learning suggestion yet for ${String(rowWithCategory?.name || "invoice row")}`
         : "Learning not required for non-food row";
 
-    return {
+    const rowParserDiagnostics = enrichInvoiceRowParserDiagnostics({
       ...rowWithCategory,
+      confidence,
+      status,
+      linkedIngredientId,
+      matchedIngredientName,
+      matchConfidence,
+    });
+
+    return {
+      ...rowParserDiagnostics,
       confidence,
       status,
       linkedIngredientId,
@@ -1092,7 +1354,7 @@ export function parseSupplierInvoiceText(importText: string, supplierName: strin
       };
     })
     .filter(Boolean)
-    .map((row: any) => attachInvoiceCogsClassification(row));
+    .map((row: any) => enrichInvoiceRowParserDiagnostics(attachInvoiceCogsClassification(row)));
 }
 
 
@@ -1191,16 +1453,26 @@ export function parseMblColumnInvoiceRows(importText: string, supplierName: stri
     });
   });
 
-  return rows.map((row: any) => attachInvoiceCogsClassification(row));
+  return rows.map((row: any) => enrichInvoiceRowParserDiagnostics(attachInvoiceCogsClassification(row)));
 }
 
 export function parseSupplierInvoiceTextSmart(importText: string, supplierName: string) {
-  const mblRows = parseMblColumnInvoiceRows(importText, supplierName);
-  if (mblRows.length >= 3) {
-    return mblRows;
-  }
+  const standardRows = parseSupplierInvoiceText(importText, supplierName).map((row: any) =>
+    enrichInvoiceRowParserDiagnostics({ ...row, recoverySource: row?.recoverySource || "standard_parser" })
+  );
+  const mblRows = parseMblColumnInvoiceRows(importText, supplierName).map((row: any) =>
+    enrichInvoiceRowParserDiagnostics({ ...row, recoverySource: row?.recoverySource || "mbl_column_parser" })
+  );
 
-  return parseSupplierInvoiceText(importText, supplierName);
+  if (!mblRows.length) return standardRows;
+  if (!standardRows.length) return mblRows;
+
+  const standardScore = scoreInvoiceParserCandidate(standardRows, "standard_parser");
+  const mblScore = scoreInvoiceParserCandidate(mblRows, "mbl_column_parser");
+
+  return mblScore.score >= standardScore.score || mblRows.length >= Math.max(3, standardRows.length)
+    ? mblRows
+    : standardRows;
 }
 
 export function parseLooseNumber(value: string) {
