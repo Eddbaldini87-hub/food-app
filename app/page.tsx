@@ -19,6 +19,8 @@ import { StockPage } from "../components/StockPage";
 import { StocktakePage } from "../components/StocktakePage";
 import { InvoiceIntakeView } from "../components/InvoiceIntakeView";
 import { useInvoiceIntake } from "../hooks/useInvoiceIntake";
+import { usePosSales } from "../hooks/usePosSales";
+import { useBackup } from "../hooks/useBackup";
 import { POSSalesPage } from "../components/POSSalesPage";
 import { InvoiceSpendPage } from "../components/InvoiceSpendPage";
 import { BackupPage } from "../components/BackupPage";
@@ -296,9 +298,6 @@ export default function Page() {
   const [invoiceQualityWarning, setInvoiceQualityWarning] = useState("");
   const [invoiceFixingRowId, setInvoiceFixingRowId] = useState<string | null>(null);
   const [lockedInvoiceHistory, setLockedInvoiceHistory] = useState<any[]>([]);
-  const [posSales, setPosSales] = useState<any[]>([]);
-  const [posDishMatches, setPosDishMatches] = useState<Record<string, string>>({});
-  const [posSalesMessage, setPosSalesMessage] = useState("");
   const [venueState, setVenueState] = useState<any>({ currentVenueId: "", venues: [] });
   const [venueMessage, setVenueMessage] = useState("");
   const [pendingVenueBackup, setPendingVenueBackup] = useState<any>(null);
@@ -307,7 +306,6 @@ export default function Page() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [storageLoaded, setStorageLoaded] = useState(false);
   const [failedStorageKeys, setFailedStorageKeys] = useState<Set<string>>(new Set());
-  const [backupHistory, setBackupHistory] = useState<any[]>([]);
   const [damageHistory, setDamageHistory] = useState<any[]>([]);
   const [supplierMatchMemory, setSupplierMatchMemory] = useState<Record<string, any>>({});
 
@@ -348,15 +346,6 @@ export default function Page() {
       setSuppliers(savedSuppliers.map(normaliseSupplierRecord).filter((supplier: any) => supplier.name));
     }
 
-    const savedPosSales = safeParse<any[]>(STORAGE_KEYS.POS_SALES, [], isValidArray, markStorageKeyFailed);
-    if (Array.isArray(savedPosSales)) {
-      setPosSales(savedPosSales);
-    }
-
-    const savedPosMatches = safeParse<Record<string, string>>(STORAGE_KEYS.POS_MATCHES, {}, isValidObject, markStorageKeyFailed);
-    if (savedPosMatches && typeof savedPosMatches === "object" && !Array.isArray(savedPosMatches)) {
-      setPosDishMatches(savedPosMatches);
-    }
 
     const invoiceSpend = safeParse<any[]>(INVOICE_SPEND_STORAGE_KEY, [], isValidArray, markStorageKeyFailed);
     if (Array.isArray(invoiceSpend)) {
@@ -382,21 +371,6 @@ export default function Page() {
     setStorageLoaded(true);
   }, []);
 
-  useEffect(() => {
-    try {
-      const rawHistory = localStorage.getItem(BACKUP_HISTORY_KEY);
-      if (!rawHistory) {
-        setBackupHistory([]);
-        return;
-      }
-
-      const parsedHistory = JSON.parse(rawHistory);
-      setBackupHistory(Array.isArray(parsedHistory) ? parsedHistory.slice(0, 5) : []);
-    } catch (error) {
-      console.warn("Failed loading GP Police backup history", error);
-      setBackupHistory([]);
-    }
-  }, []);
 
   useEffect(() => {
     const savedLockedInvoices = safeParse<any[]>(LOCKED_INVOICE_HISTORY_KEY, [], isValidArray);
@@ -494,17 +468,6 @@ export default function Page() {
     safeSetLocalStorageValue(STORAGE_KEYS.SUPPLIERS, suppliers);
   }, [storageLoaded, suppliers, failedStorageKeys]);
 
-  useEffect(() => {
-    if (!storageLoaded) return;
-    if (failedStorageKeys.has(STORAGE_KEYS.POS_SALES)) return;
-    safeSetLocalStorageValue(STORAGE_KEYS.POS_SALES, posSales);
-  }, [storageLoaded, posSales, failedStorageKeys]);
-
-  useEffect(() => {
-    if (!storageLoaded) return;
-    if (failedStorageKeys.has(STORAGE_KEYS.POS_MATCHES)) return;
-    safeSetLocalStorageValue(STORAGE_KEYS.POS_MATCHES, posDishMatches);
-  }, [storageLoaded, posDishMatches, failedStorageKeys]);
 
   useEffect(() => {
     if (!storageLoaded) return;
@@ -1013,123 +976,6 @@ export default function Page() {
     () => computedRecipes.filter((recipe: any) => recipe.recipeType === "final dish"),
     [computedRecipes]
   );
-
-  const posSalesReport = useMemo(() => {
-    const matchedRows = posSales
-      .map((sale: any) => {
-        const linkedRecipeId = posDishMatches[sale.posItemName] || "";
-        const linkedRecipe = linkedRecipeId ? finalDishRecipes.find((recipe: any) => recipe.id === linkedRecipeId) : null;
-        if (!linkedRecipe) {
-          return {
-            ...sale,
-            linkedRecipe: null,
-            recipeCostPerDish: 0,
-            dishCostTotal: 0,
-            profitTotal: 0,
-            gpPercent: 0,
-            averageSalePrice: safeNumber(sale.quantitySold) > 0 ? safeNumber(sale.totalSales) / safeNumber(sale.quantitySold) : 0,
-          };
-        }
-
-        const quantitySold = safeNumber(sale.quantitySold);
-        const totalSales = safeNumber(sale.totalSales);
-        const recipeCostPerDish = safeNumber(linkedRecipe.costPerPortion || linkedRecipe.totalCost);
-        const dishCostTotal = recipeCostPerDish * quantitySold;
-        const profitTotal = totalSales - dishCostTotal;
-        const gpPercent = totalSales > 0 ? (profitTotal / totalSales) * 100 : 0;
-        const averageSalePrice = quantitySold > 0 ? totalSales / quantitySold : 0;
-
-        return {
-          ...sale,
-          linkedRecipe,
-          recipeCostPerDish,
-          dishCostTotal,
-          profitTotal,
-          gpPercent,
-          averageSalePrice,
-        };
-      });
-
-    const matched = matchedRows.filter((row: any) => row.linkedRecipe);
-    const unmatched = matchedRows.filter((row: any) => !row.linkedRecipe);
-    const totalPosSales = posSales.reduce((sum: number, sale: any) => sum + safeNumber(sale.totalSales), 0);
-    const matchedSales = matched.reduce((sum: number, row: any) => sum + safeNumber(row.totalSales), 0);
-    const estimatedGrossProfit = matched.reduce((sum: number, row: any) => sum + safeNumber(row.profitTotal), 0);
-    const averageGpPercent = matchedSales > 0 ? (estimatedGrossProfit / matchedSales) * 100 : 0;
-    const winners = matched.filter((row: any) => row.gpPercent >= 70);
-    const warnings = matched.filter((row: any) => row.gpPercent >= 60 && row.gpPercent < 70);
-    const redFlags = matched.filter((row: any) => row.gpPercent < 60);
-
-    const topRedFlag = redFlags
-      .slice()
-      .sort((a: any, b: any) => safeNumber(b.quantitySold) - safeNumber(a.quantitySold))[0];
-    const topWarning = warnings
-      .slice()
-      .sort((a: any, b: any) => safeNumber(b.totalSales) - safeNumber(a.totalSales))[0];
-    const topWinner = winners
-      .slice()
-      .sort((a: any, b: any) => safeNumber(b.profitTotal) - safeNumber(a.profitTotal))[0];
-
-    const summaryCallouts = matched.length === 0
-      ? ["Upload sales and match dishes first — GP Police can’t arrest ghosts."]
-      : [
-          topRedFlag
-            ? `${topRedFlag.posItemName} sold ${roundTo(topRedFlag.quantitySold, 0)} times and is only running at ${roundTo(topRedFlag.gpPercent, 1)}% GP.`
-            : null,
-          topWarning
-            ? `${topWarning.posItemName} is borderline at ${roundTo(topWarning.gpPercent, 1)}% GP.`
-            : null,
-          topWinner
-            ? `${topWinner.posItemName} is carrying the kitchen at ${roundTo(topWinner.gpPercent, 1)}% GP.`
-            : null,
-        ].filter(Boolean).slice(0, 3);
-
-    const damageReport = matched
-      .map((row: any) => {
-        const targetProfit = safeNumber(row.totalSales) * 0.7;
-        const actualProfit = safeNumber(row.totalSales) - safeNumber(row.dishCostTotal);
-        const lostOpportunity = targetProfit - actualProfit;
-        return {
-          ...row,
-          targetProfit,
-          actualProfit,
-          lostOpportunity,
-        };
-      })
-      .filter((row: any) => safeNumber(row.lostOpportunity) > 0)
-      .sort((a: any, b: any) => safeNumber(b.lostOpportunity) - safeNumber(a.lostOpportunity))
-      .slice(0, 5);
-
-    const fixSuggestions = redFlags.map((row: any) => {
-      const priceNeededFor70 = safeNumber(row.recipeCostPerDish) > 0 ? safeNumber(row.recipeCostPerDish) / 0.3 : 0;
-      const targetCostAtCurrentPrice = safeNumber(row.averageSalePrice) * 0.3;
-      const costReductionNeeded = safeNumber(row.recipeCostPerDish) - targetCostAtCurrentPrice;
-
-      return {
-        ...row,
-        priceNeededFor70,
-        targetCostAtCurrentPrice,
-        costReductionNeeded,
-      };
-    });
-
-    return {
-      matchedRows,
-      matched,
-      unmatched,
-      totalPosSales,
-      matchedSales,
-      estimatedGrossProfit,
-      averageGpPercent,
-      winners,
-      warnings,
-      redFlags,
-      summaryCallouts,
-      damageReport,
-      fixSuggestions,
-    };
-  }, [finalDishRecipes, posDishMatches, posSales]);
-
 
   const lowStockCount = orderingRows.filter((row: any) => row.suggestedOrder > 0).length;
   const estimatedOrderSpend = orderingRows.reduce((sum: number, row: any) => sum + safeNumber(row.estimatedOrderCost), 0);
@@ -1644,140 +1490,70 @@ export default function Page() {
     setInvoiceSpendMessage("Invoice spend saved.");
   };
 
-  const handlePosSalesCsvUpload = (file: File | null) => {
-    if (!file) return;
+  const backupRef = useRef<(reason?: string) => any>(() => null);
 
-    const fileName = String(file.name || "").toLowerCase();
-    if (!fileName.endsWith(".csv")) {
-      setPosSalesMessage("Upload a CSV file only. GP Police is not reading mystery paperwork here.");
-      return;
-    }
+  const pos = usePosSales({
+    finalDishRecipes,
+    storageLoaded,
+    failedStorageKeys,
+    createEmergencyBackupSnapshot: (reason?: string) => backupRef.current(reason),
+  });
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = parsePosSalesCsv(String(reader.result || ""));
-      if (result.warning) {
-        setPosSalesMessage(result.warning);
-      }
-      if (result.sales.length > 0) {
-        createEmergencyBackupSnapshot("import_pos_sales");
-        setPosSales(result.sales as any[]);
-        setPosSalesMessage(`Imported ${result.sales.length} POS item${result.sales.length === 1 ? "" : "s"}. Match them once and GP Police starts calling out the margin.`);
-      }
-    };
-    reader.onerror = () => setPosSalesMessage("Could not read that CSV. Export it again and try one more time.");
-    reader.readAsText(file);
-  };
+  const {
+    posSales,
+    setPosSales,
+    posDishMatches,
+    setPosDishMatches,
+    posSalesMessage,
+    setPosSalesMessage,
+    posSalesReport,
+    handlePosSalesCsvUpload,
+    updatePosDishMatch,
+    clearPosSales,
+  } = pos;
 
-  const updatePosDishMatch = (posItemName: string, recipeId: string) => {
-    setPosDishMatches((previous: any) => ({
-      ...previous,
-      [posItemName]: recipeId,
-    }));
-  };
+  const backup = useBackup({
+    storageLoaded,
+    supplierIngredients,
+    setSupplierIngredients,
+    recipes,
+    setRecipes,
+    orderingMeta,
+    setOrderingMeta,
+    suppliers,
+    setSuppliers,
+    posSales,
+    setPosSales,
+    posDishMatches,
+    setPosDishMatches,
+    invoiceSpendRecords,
+    setInvoiceSpendRecords,
+    stockMovements,
+    setStockMovements,
+    stocktakeRecords,
+    setStocktakeRecords,
+    lockedInvoiceHistory,
+    setLockedInvoiceHistory,
+    damageHistory,
+    setDamageHistory,
+    supplierMatchMemory,
+    setSupplierMatchMemory,
+    invoiceDraft,
+    venueState,
+    setFailedStorageKeys,
+  });
 
-  const clearPosSales = () => {
-    const confirmed = window.confirm("Clear uploaded POS sales? Recipe matches stay saved, but the current sales upload gets wiped.");
-    if (!confirmed) return;
-    createEmergencyBackup("manual_backup");
-    setPosSales([]);
-    setPosSalesMessage("POS sales cleared. Upload the next CSV when service has finished robbing the till.");
-  };
+  backupRef.current = backup.createEmergencyBackupSnapshot;
 
-  const readGpPoliceAppStorage = () => {
-    return GP_POLICE_APP_KEYS.reduce((snapshot: Record<string, string>, key: string) => {
-      const value = localStorage.getItem(key);
-      if (value !== null) {
-        snapshot[key] = value;
-      }
-      return snapshot;
-    }, {});
-  };
-
-  const restoreGpPoliceAppStorage = (snapshot: Record<string, string> = {}) => {
-    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
-      return false;
-    }
-
-    let restoredCount = 0;
-
-    GP_POLICE_APP_KEYS.forEach((key) => {
-      if (!Object.prototype.hasOwnProperty.call(snapshot, key)) {
-        return;
-      }
-
-      const rawValue = snapshot[key];
-
-      if (typeof rawValue !== "string") {
-        console.warn("GP Police restore skipped bad raw storage value:", key);
-        return;
-      }
-
-      try {
-        JSON.parse(rawValue);
-      } catch (error) {
-        console.warn("GP Police restore skipped invalid JSON value:", key, error);
-        return;
-      }
-
-      if (safeSetLocalStorageRaw(key, rawValue)) {
-        restoredCount += 1;
-      }
-    });
-
-    return restoredCount > 0;
-  };
-
-  const readBackupHistory = () => {
-    try {
-      const rawHistory = localStorage.getItem(BACKUP_HISTORY_KEY);
-      if (!rawHistory) return [];
-
-      const parsedHistory = JSON.parse(rawHistory);
-      return Array.isArray(parsedHistory) ? parsedHistory : [];
-    } catch (error) {
-      console.warn("Failed reading GP Police backup history", error);
-      return [];
-    }
-  };
-
-  const createEmergencyBackupSnapshot = (reason = "manual_backup") => {
-    if (!storageLoaded) return null;
-
-    try {
-      const snapshot = {
-        createdAt: new Date().toISOString(),
-        reason,
-        ingredients: supplierIngredients,
-        recipes,
-        orderingMeta,
-        suppliers,
-        posSales,
-        posDishMatches,
-        invoiceSpendRecords,
-        stockMovements,
-        stocktakeRecords,
-        lockedInvoiceHistory,
-        damageHistory,
-        supplierMatchMemory,
-        invoiceDraft,
-        venueState,
-        data: readGpPoliceAppStorage(),
-      };
-
-      safeSetLocalStorageValue(VENUE_STORAGE_KEYS.EMERGENCY_BACKUP, snapshot);
-
-      const existingHistory = readBackupHistory();
-      const newHistory = [snapshot, ...existingHistory].slice(0, 5);
-      safeSetLocalStorageValue(BACKUP_HISTORY_KEY, newHistory);
-      setBackupHistory(newHistory);
-
-      return snapshot;
-    } catch (error) {
-      console.error("Failed creating emergency backup", error);
-      return null;
-    }
-  };
+  const {
+    backupHistory,
+    createEmergencyBackupSnapshot,
+    createEmergencyBackup,
+    restoreFromSnapshot,
+    restoreEmergencyBackup,
+    readGpPoliceAppStorage,
+    restoreGpPoliceAppStorage,
+  } = backup;
 
   const invoice = useInvoiceIntake({
     selectedSupplier,
@@ -1800,197 +1576,6 @@ export default function Page() {
     createEmergencyBackupSnapshot,
     preprocessInvoiceImageForOCR,
   });
-
-  const createEmergencyBackup = (reason: string) => {
-    return createEmergencyBackupSnapshot(reason);
-  };
-
-  const safeReadBackupArray = (snapshot: any, directKey: string, rawStorageKey: string) => {
-    if (Array.isArray(snapshot?.[directKey])) {
-      return snapshot[directKey];
-    }
-
-    try {
-      if (!snapshot?.data || typeof snapshot.data !== "object" || Array.isArray(snapshot.data)) return null;
-      const rawValue = snapshot.data[rawStorageKey];
-      if (typeof rawValue !== "string") return null;
-      const parsedValue = JSON.parse(rawValue);
-      return Array.isArray(parsedValue) ? parsedValue : null;
-    } catch (error) {
-      console.warn("GP Police backup array read skipped:", directKey, error);
-      return null;
-    }
-  };
-
-  const safeReadBackupObject = (snapshot: any, directKey: string, rawStorageKey: string) => {
-    if (snapshot?.[directKey] && typeof snapshot[directKey] === "object" && !Array.isArray(snapshot[directKey])) {
-      return snapshot[directKey];
-    }
-
-    try {
-      if (!snapshot?.data || typeof snapshot.data !== "object" || Array.isArray(snapshot.data)) return null;
-      const rawValue = snapshot.data[rawStorageKey];
-      if (typeof rawValue !== "string") return null;
-      const parsedValue = JSON.parse(rawValue);
-      return parsedValue && typeof parsedValue === "object" && !Array.isArray(parsedValue) ? parsedValue : null;
-    } catch (error) {
-      console.warn("GP Police backup object read skipped:", directKey, error);
-      return null;
-    }
-  };
-
-  const getBackupRestoreSafetyReport = (snapshot: any) => {
-    const report = {
-      hasAnyData: false,
-      arraysFound: 0,
-      objectsFound: 0,
-      rawStorageKeysFound: 0,
-    };
-
-    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
-      return report;
-    }
-
-    [
-      "ingredients",
-      "recipes",
-      "suppliers",
-      "posSales",
-      "invoiceSpendRecords",
-      "stockMovements",
-      "stocktakeRecords",
-      "lockedInvoiceHistory",
-      "damageHistory",
-    ].forEach((key) => {
-      if (Array.isArray(snapshot[key])) {
-        report.arraysFound += 1;
-      }
-    });
-
-    ["orderingMeta", "posDishMatches", "supplierMatchMemory", "venueState"].forEach((key) => {
-      if (snapshot[key] && typeof snapshot[key] === "object" && !Array.isArray(snapshot[key])) {
-        report.objectsFound += 1;
-      }
-    });
-
-    if (snapshot.data && typeof snapshot.data === "object" && !Array.isArray(snapshot.data)) {
-      report.rawStorageKeysFound = Object.keys(snapshot.data).filter((key) => typeof snapshot.data[key] === "string").length;
-    }
-
-    report.hasAnyData = report.arraysFound > 0 || report.objectsFound > 0 || report.rawStorageKeysFound > 0;
-    return report;
-  };
-
-  const restoreFromSnapshot = (snapshot: any, label = "selected backup") => {
-    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
-      window.alert("Backup restore failed. The selected backup data is damaged.");
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `Restore ${label}? This will replace the current kitchen data with the selected backup snapshot.`
-    );
-
-    if (!confirmed) return;
-
-    try {
-      const safetyReport = getBackupRestoreSafetyReport(snapshot);
-
-      if (!safetyReport.hasAnyData) {
-        window.alert("Backup restore blocked. GP Police could not find usable data in that snapshot.");
-        return;
-      }
-
-      createEmergencyBackupSnapshot("pre_restore_backup");
-
-      const backupIngredients = safeReadBackupArray(snapshot, "ingredients", STORAGE_KEYS.INGREDIENTS);
-      const backupRecipes = safeReadBackupArray(snapshot, "recipes", STORAGE_KEYS.RECIPES);
-      const backupOrderingMeta = safeReadBackupObject(snapshot, "orderingMeta", STORAGE_KEYS.ORDERING);
-      const backupSuppliers = safeReadBackupArray(snapshot, "suppliers", STORAGE_KEYS.SUPPLIERS);
-      const backupPosSales = safeReadBackupArray(snapshot, "posSales", STORAGE_KEYS.POS_SALES);
-      const backupPosDishMatches = safeReadBackupObject(snapshot, "posDishMatches", STORAGE_KEYS.POS_MATCHES);
-      const backupInvoiceSpendRecords = safeReadBackupArray(snapshot, "invoiceSpendRecords", INVOICE_SPEND_STORAGE_KEY);
-      const backupStockMovements = safeReadBackupArray(snapshot, "stockMovements", STOCK_MOVEMENTS_STORAGE_KEY);
-      const backupStocktakeRecords = safeReadBackupArray(snapshot, "stocktakeRecords", STOCKTAKE_STORAGE_KEY);
-      const backupLockedInvoiceHistory = safeReadBackupArray(snapshot, "lockedInvoiceHistory", LOCKED_INVOICE_HISTORY_KEY);
-      const backupDamageHistory = safeReadBackupArray(snapshot, "damageHistory", DAMAGE_HISTORY_STORAGE_KEY);
-      const backupSupplierMatchMemory = safeReadBackupObject(snapshot, "supplierMatchMemory", SUPPLIER_MATCH_MEMORY_STORAGE_KEY);
-
-      restoreGpPoliceAppStorage(snapshot.data);
-
-      if (Array.isArray(backupIngredients)) {
-        setSupplierIngredients(backupIngredients);
-      }
-
-      if (Array.isArray(backupRecipes)) {
-        setRecipes(backupRecipes);
-      }
-
-      if (backupOrderingMeta && typeof backupOrderingMeta === "object" && !Array.isArray(backupOrderingMeta)) {
-        setOrderingMeta(backupOrderingMeta);
-      }
-
-      if (Array.isArray(backupSuppliers)) {
-        setSuppliers(backupSuppliers);
-      }
-
-      if (Array.isArray(backupPosSales)) {
-        setPosSales(backupPosSales);
-      }
-
-      if (backupPosDishMatches && typeof backupPosDishMatches === "object" && !Array.isArray(backupPosDishMatches)) {
-        setPosDishMatches(backupPosDishMatches);
-      }
-
-      if (Array.isArray(backupInvoiceSpendRecords)) {
-        setInvoiceSpendRecords(backupInvoiceSpendRecords);
-      }
-
-      if (Array.isArray(backupStockMovements)) {
-        setStockMovements(backupStockMovements);
-      }
-
-      if (Array.isArray(backupStocktakeRecords)) {
-        setStocktakeRecords(backupStocktakeRecords);
-      }
-
-      if (Array.isArray(backupLockedInvoiceHistory)) {
-        setLockedInvoiceHistory(backupLockedInvoiceHistory.slice(0, 25));
-      }
-
-      if (Array.isArray(backupDamageHistory)) {
-        setDamageHistory(backupDamageHistory.slice(0, 100));
-      }
-
-      if (backupSupplierMatchMemory && typeof backupSupplierMatchMemory === "object" && !Array.isArray(backupSupplierMatchMemory)) {
-        setSupplierMatchMemory(backupSupplierMatchMemory);
-      }
-
-      setFailedStorageKeys(new Set());
-
-      window.alert("Emergency backup restored. GP Police restored only valid backup data and skipped anything damaged.");
-    } catch (error) {
-      console.warn("Failed to restore emergency backup", error);
-      window.alert("Backup restore failed. The backup data may be damaged.");
-    }
-  };
-
-  const restoreEmergencyBackup = () => {
-    const rawBackup = localStorage.getItem(VENUE_STORAGE_KEYS.EMERGENCY_BACKUP);
-
-    if (!rawBackup) {
-      window.alert("No emergency backup found.");
-      return;
-    }
-
-    try {
-      const backup = JSON.parse(rawBackup);
-      restoreFromSnapshot(backup, "the emergency backup");
-    } catch (error) {
-      console.warn("Failed to read emergency backup", error);
-      window.alert("Backup restore failed. The backup data may be damaged.");
-    }
-  };
 
   const readVenueData = () => {
     const parsedVenueData = safeParseVenueState<Record<string, any>>(VENUE_STORAGE_KEYS.VENUE_DATA, {});
