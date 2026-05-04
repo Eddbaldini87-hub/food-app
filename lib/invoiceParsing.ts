@@ -101,6 +101,114 @@ export function isPlausibleInvoiceQuantity(quantity: any, unit: string) {
 }
 
 
+
+
+export type SmartInvoiceTextRow = {
+  name: string;
+  quantity: string;
+  unit: string;
+  price: string;
+  raw: string;
+};
+
+export function splitTextIntoRowsByPrice(text: string): SmartInvoiceTextRow[] {
+  const tokens = String(text || "")
+    .replace(/\$/g, " $ ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
+
+  const rows: SmartInvoiceTextRow[] = [];
+  let currentTokens: string[] = [];
+  const pricePattern = /^\$?\d+\.\d{2}$/;
+  const unitPattern = /^(kg|kgs|g|gm|gram|grams|l|lt|ltr|litre|litres|ml|ea|each|box|ctn|carton|bag|bunch|bun|pkt|pack|pc|pcs|unit|units)$/i;
+  const quantityPattern = /^\d+(?:\.\d+)?$/;
+
+  tokens.forEach((token) => {
+    const cleanedToken = token.replace(/^[^0-9$]+|[^0-9.]+$/g, "");
+    const priceToken = pricePattern.test(cleanedToken) ? cleanedToken.replace("$", "") : "";
+
+    if (!priceToken) {
+      currentTokens.push(token);
+      return;
+    }
+
+    const rowTokens = currentTokens.slice();
+    currentTokens = [];
+
+    if (!rowTokens.length) return;
+
+    let quantity = "";
+    let unit = "";
+    let quantityIndex = -1;
+
+    for (let index = rowTokens.length - 1; index >= 0; index -= 1) {
+      const maybeQuantity = rowTokens[index]?.replace(/[^0-9.]/g, "") || "";
+      const maybeUnit = rowTokens[index + 1] || "";
+
+      if (quantityPattern.test(maybeQuantity) && unitPattern.test(maybeUnit)) {
+        quantity = maybeQuantity;
+        unit = maybeUnit;
+        quantityIndex = index;
+        break;
+      }
+    }
+
+    const nameTokens = quantityIndex >= 0 ? rowTokens.slice(0, quantityIndex) : rowTokens;
+    const name = nameTokens.join(" ").replace(/\s+/g, " ").trim();
+
+    if (!name) return;
+
+    const raw = [name, quantity, unit, priceToken].filter(Boolean).join(" ");
+    rows.push({ name, quantity, unit, price: priceToken, raw });
+  });
+
+  return rows;
+}
+
+export function parseSupplierInvoiceTextWithSmartRows(text: string, supplierName: string) {
+  const originalRows = parseSupplierInvoiceText(text, supplierName);
+
+  try {
+    const smartRows = splitTextIntoRowsByPrice(text);
+
+    if (!smartRows.length) {
+      return originalRows;
+    }
+
+    const reconstructedText = smartRows.map((row) => row.raw).join("\n");
+    const reconstructedRows = parseSupplierInvoiceText(reconstructedText, supplierName);
+
+    return reconstructedRows.length >= originalRows.length ? reconstructedRows : originalRows;
+  } catch (error) {
+    console.warn("GP Police smart invoice row reconstruction failed, using original parser", error);
+    return originalRows;
+  }
+}
+
+export function getInvoiceRowRecoveryPriceAnchorCount(text: string) {
+  const matches = String(text || "").match(/(?:\$\s*)?\b\d{1,5}\.\d{2}\b/g);
+  return Array.isArray(matches) ? matches.length : 0;
+}
+
+export function rebuildInvoiceTextFromPriceAnchors(text: string) {
+  const smartRows = splitTextIntoRowsByPrice(text);
+  if (!smartRows.length) return "";
+  return smartRows.map((row) => row.raw).filter(Boolean).join("\n");
+}
+
+export function splitInvoiceTextWithSoftLineBreaks(text: string) {
+  return String(text || "")
+    .replace(/\r/g, "\n")
+    .replace(/([0-9]{1,5}\.[0-9]{2})(\s+)(?=[A-Za-z][A-Za-z0-9&'()\-/ ]{2,})/g, "$1\n")
+    .replace(/([A-Za-z])\s+(?=\d{1,5}\.\d{2}\s+[A-Za-z]{3,})/g, "$1\n")
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
 export type InvoiceRowShapeName =
   | "code_name_qty_unit_price"
   | "name_qty_unit_price"
