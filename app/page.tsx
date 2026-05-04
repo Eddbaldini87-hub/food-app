@@ -10,6 +10,8 @@ import { usePosSales } from "../hooks/usePosSales";
 import { useBackup } from "../hooks/useBackup";
 import { useStockOrdering } from "../hooks/useStockOrdering";
 import { useSupplierIngredients } from "../hooks/useSupplierIngredients";
+import { useRecipeController } from "../hooks/useRecipeController";
+import { useVenueController } from "../hooks/useVenueController";
 import { createPageRenderers } from "../components/pageRenderers/PageRenderers";
 import { createRecipePageRenderers } from "../components/pageRenderers/RecipePageRenderers";
 import { createAdminPageRenderers } from "../components/pageRenderers/AdminPageRenderers";
@@ -201,21 +203,9 @@ export default function Page() {
   const [supplierIngredients, setSupplierIngredients] = useState<any[]>([]);
   const [recipes, setRecipes] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [recipeForm, setRecipeForm] = useState<any>(defaultRecipeForm);
-  const [recipeSearchTerm, setRecipeSearchTerm] = useState("");
-  const [recipeTypeFilter, setRecipeTypeFilter] = useState("all");
-  const [recipeFolderView, setRecipeFolderView] = useState<any>(null);
   const [dashboardFolderView, setDashboardFolderView] = useState<string | null>(null);
-  const [recipeIngredientSearch, setRecipeIngredientSearch] = useState("");
-  const recipeIngredientSearchRef = useRef<HTMLInputElement | null>(null);
-  const recipeImportFileInputRef = useRef<HTMLInputElement | null>(null);
   const invoiceCameraInputRef = useRef<HTMLInputElement | null>(null);
-  const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
-  const [selectedRecipeView, setSelectedRecipeView] = useState<"detail" | "prepSheet">("detail");
   const [orderingMeta, setOrderingMeta] = useState<Record<string, any>>({});
-  const [recipeImportText, setRecipeImportText] = useState("");
-  const [recipeImportMessage, setRecipeImportMessage] = useState("");
-  const [importedRecipeDraft, setImportedRecipeDraft] = useState<any>(null);
   const [supplierInvoiceText, setSupplierInvoiceText] = useState("");
   const [supplierInvoiceRows, setSupplierInvoiceRows] = useState<any[]>([]);
   const [invoiceDraft, setInvoiceDraft] = useState<any>(null);
@@ -237,27 +227,12 @@ export default function Page() {
   const [invoiceQualityWarning, setInvoiceQualityWarning] = useState("");
   const [invoiceFixingRowId, setInvoiceFixingRowId] = useState<string | null>(null);
   const [lockedInvoiceHistory, setLockedInvoiceHistory] = useState<any[]>([]);
-  const [venueState, setVenueState] = useState<any>({ currentVenueId: "", venues: [] });
-  const [venueMessage, setVenueMessage] = useState("");
-  const [pendingVenueBackup, setPendingVenueBackup] = useState<any>(null);
-  const venueBackupInputRef = useRef<HTMLInputElement | null>(null);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [storageLoaded, setStorageLoaded] = useState(false);
   const [failedStorageKeys, setFailedStorageKeys] = useState<Set<string>>(new Set());
   const [damageHistory, setDamageHistory] = useState<any[]>([]);
   const [supplierMatchMemory, setSupplierMatchMemory] = useState<Record<string, any>>({});
-
-  const saveVenueStateToStorage = (nextVenueState: any) => {
-    if (!isValidVenueState(nextVenueState)) {
-      console.warn("GP Police blocked invalid venue save", nextVenueState);
-      return false;
-    }
-
-    safeSetLocalStorageValue(VENUE_STORAGE_KEYS.VENUES, nextVenueState);
-    return true;
-  };
-
 
   useEffect(() => {
     const loadFailedKeys = new Set<string>();
@@ -332,45 +307,6 @@ export default function Page() {
       invoiceDate: String(savedInvoiceDraft.invoiceDate || new Date().toISOString().slice(0, 10)),
     });
     setInvoiceDraftMessage("Latest invoice draft loaded from this device.");
-  }, []);
-
-  useEffect(() => {
-    const fallbackVenueState = getDefaultVenueState();
-    const savedVenues = localStorage.getItem(VENUE_STORAGE_KEYS.VENUES);
-
-    if (!savedVenues) {
-      safeSetLocalStorageValue(VENUE_STORAGE_KEYS.VENUES, fallbackVenueState);
-      setVenueState(fallbackVenueState);
-      return;
-    }
-
-    const parsedVenues = safeParseVenueState<any>(VENUE_STORAGE_KEYS.VENUES, null);
-
-    if (!isValidVenueState(parsedVenues)) {
-      console.warn("Invalid venue structure");
-      setVenueState(fallbackVenueState);
-      return;
-    }
-
-    const validVenue = parsedVenues.venues.find((venue: any) => venue.id === parsedVenues.currentVenueId);
-    const safeVenueState = validVenue
-      ? parsedVenues
-      : {
-          ...parsedVenues,
-          currentVenueId: parsedVenues.venues[0]?.id || DEFAULT_VENUE_ID,
-        };
-
-    if (!isValidVenueState(safeVenueState)) {
-      console.warn("Invalid selected venue state");
-      setVenueState(fallbackVenueState);
-      return;
-    }
-
-    if (safeVenueState.currentVenueId !== parsedVenues.currentVenueId) {
-      saveVenueStateToStorage(safeVenueState);
-    }
-
-    setVenueState(safeVenueState);
   }, []);
 
   useEffect(() => {
@@ -454,193 +390,36 @@ export default function Page() {
     };
   }, [supplierInvoicePhotoPreviewUrl]);
 
-  const ingredientLookup = useMemo(() => {
-    return supplierIngredients.reduce((accumulator: any, ingredient: any) => {
-      const derived = getIngredientDerivedValues(ingredient);
-      accumulator[ingredient.id] = {
-        ...ingredient,
-        ...derived,
-      };
-      return accumulator;
-    }, {});
-  }, [supplierIngredients]);
-
-  const computedRecipes = useMemo(() => {
-    const recipeMap: Record<string, any> = {};
-    const baseRecipes = recipes.map((recipe) => ({
-      ...recipe,
-      components: Array.isArray(recipe.components) ? recipe.components : [],
-    }));
-
-    const computeRecipe = (recipeId: string, stack: string[] = []) => {
-      if (recipeMap[recipeId]) return recipeMap[recipeId];
-
-      const recipe = baseRecipes.find((item: any) => item.id === recipeId);
-      if (!recipe) return null;
-
-      if (stack.includes(recipeId)) {
-        return {
-          ...recipe,
-          baseUnit: baseUnitFromSizeUnit(normalizeRecipeYieldUnitForMath(recipe.yieldUnit)),
-          totalCost: 0,
-          costPerBaseUnit: 0,
-          costPerPortion: 0,
-          portionsPerBatch: 0,
-          foodCostPercent: 0,
-          grossProfitAmount: 0,
-          grossProfitPercent: 0,
-          componentDetails: [],
-        };
-      }
-
-      const componentDetails = recipe.components.map((component: any) => {
-        if (component.componentType === "supplier") {
-          return buildComponentDetail(component, ingredientLookup, {});
-        }
-
-        const linkedRecipe = computeRecipe(component.linkedId, [...stack, recipeId]);
-        return buildComponentDetail(
-          component,
-          ingredientLookup,
-          linkedRecipe ? { [component.linkedId]: linkedRecipe } : {}
-        );
-      });
-
-      const totalCost = componentDetails.reduce((sum: number, item: any) => sum + safeNumber(item.lineCost), 0);
-      const isFinalDish = recipe.recipeType === "final dish";
-      const recipeBaseValues = isFinalDish
-        ? { baseUnit: "each", costPerBaseUnit: totalCost }
-        : getRecipeCostPerBaseUnit({
-            totalCost,
-            yieldAmount: recipe.yieldAmount,
-            yieldUnit: recipe.yieldUnit,
-          });
-      const baseUnit = recipeBaseValues.baseUnit;
-      const costPerBaseUnit = recipeBaseValues.costPerBaseUnit;
-      const portionsPerBatch = isFinalDish ? 1 : 0;
-      const costPerPortion = isFinalDish ? totalCost : 0;
-
-      const sellPrice = safeNumber(recipe.sellPrice);
-      const foodCostPercent = sellPrice > 0 ? (costPerPortion / sellPrice) * 100 : 0;
-      const grossProfitAmount = sellPrice - costPerPortion;
-      const grossProfitPercent = sellPrice > 0 ? (grossProfitAmount / sellPrice) * 100 : 0;
-
-      const computed = {
-        ...recipe,
-        baseUnit,
-        totalCost,
-        costPerBaseUnit,
-        componentDetails,
-        portionsPerBatch,
-        costPerPortion,
-        foodCostPercent,
-        grossProfitAmount,
-        grossProfitPercent,
-      };
-
-      recipeMap[recipeId] = computed;
-      return computed;
-    };
-
-    return baseRecipes.map((recipe) => computeRecipe(recipe.id)).filter(Boolean);
-  }, [recipes, ingredientLookup]);
-
-  const computedRecipeLookup = useMemo(() => {
-    return computedRecipes.reduce((accumulator: any, recipe: any) => {
-      accumulator[recipe.id] = recipe;
-      return accumulator;
-    }, {});
-  }, [computedRecipes]);
-
-  const filteredRecipes = useMemo(() => {
-    const search = recipeSearchTerm.trim().toLowerCase();
-
-    return computedRecipes.filter((recipe: any) => {
-      const matchesFilter = recipeTypeFilter === "all" ? true : recipe.recipeType === recipeTypeFilter;
-
-      if (!matchesFilter) {
-        return false;
-      }
-
-      if (!search) {
-        return true;
-      }
-
-      const searchableText = [recipe.name, recipe.recipeType, recipe.category]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      return searchableText.includes(search);
-    });
-  }, [computedRecipes, recipeSearchTerm, recipeTypeFilter]);
-
-  const selectedRecipe = selectedRecipeId ? computedRecipeLookup[selectedRecipeId] : null;
-
-  const recipeFolderOptions = [
-    {
-      key: "all",
-      label: "Total Recipes",
-      helper: "Every recipe in the folder. No hiding from the numbers now.",
-      getRecipes: () => computedRecipes,
-    },
-    {
-      key: "ingredient-prep",
-      label: "Ingredient Prep",
-      helper: "Prep recipes only. The mise en place evidence locker.",
-      getRecipes: () => computedRecipes.filter((recipe: any) => recipe.recipeType === "ingredient prep"),
-    },
-    {
-      key: "batch-recipes",
-      label: "Batch Recipes",
-      helper: "Batch recipes only. Sauces, bases, and all the margin building blocks.",
-      getRecipes: () => computedRecipes.filter((recipe: any) => recipe.recipeType === "batch recipe"),
-    },
-    {
-      key: "final-dishes",
-      label: "Final Dishes",
-      helper: "Final dishes only. This is where the GP either behaves or gets arrested.",
-      getRecipes: () => computedRecipes.filter((recipe: any) => recipe.recipeType === "final dish"),
-    },
-    {
-      key: "missing-category",
-      label: "Missing Category",
-      helper: "Recipes with no category. Bit hard to sort the evidence if the folder is blank.",
-      getRecipes: () => computedRecipes.filter((recipe: any) => !String(recipe.category || "").trim()),
-    },
-    {
-      key: "no-components",
-      label: "No Components",
-      helper: "Recipes with no ingredient lines. That's not costing, that's wishful thinking.",
-      getRecipes: () => computedRecipes.filter((recipe: any) => !Array.isArray(recipe.components) || recipe.components.length === 0),
-    },
-    {
-      key: "no-sell-price",
-      label: "No Sell Price",
-      helper: "Final dishes with no sell price. Lovely way to donate margin if no one fixes it.",
-      getRecipes: () => computedRecipes.filter((recipe: any) => recipe.recipeType === "final dish" && safeNumber(recipe.sellPrice) <= 0),
-    },
-  ];
-
-  const currentRecipeFolder = recipeFolderView
-    ? recipeFolderOptions.find((folder) => folder.key === recipeFolderView)
-    : null;
-
-  const quickAddIngredientMatches = useMemo(() => {
-    const search = recipeIngredientSearch.trim().toLowerCase();
-    if (!search) return [];
-
-    return supplierIngredients
-      .filter((ingredient: any) => {
-        const supplierName = String(ingredient.supplierName || orderingMeta[ingredient.id]?.supplierName || "").trim();
-        const haystack = [ingredient.name, supplierName].filter(Boolean).join(" ").toLowerCase();
-        return haystack.includes(search);
-      })
-      .sort((a: any, b: any) => String(a.name || "").localeCompare(String(b.name || "")))
-      .slice(0, 10);
-  }, [orderingMeta, recipeIngredientSearch, supplierIngredients]);
-
   const backupRef = useRef<(reason?: string) => any>(() => null);
+
+  const backupBridgeRef = useRef<any>({});
+
+  const {
+    venueState,
+    setVenueState,
+    venueMessage,
+    setVenueMessage,
+    pendingVenueBackup,
+    setPendingVenueBackup,
+    venueBackupInputRef,
+    currentVenue,
+    readVenueData,
+    handleSaveVenueSnapshot,
+    handleSwitchVenue,
+    handleCreateVenue,
+    handleRenameCurrentVenue,
+    handleDeleteCurrentVenue,
+    handleDownloadVenueBackup,
+    handleVenueBackupFileUpload,
+    handleRestoreBackupIntoCurrentVenue,
+    handleImportBackupAsNewVenue,
+  } = useVenueController({
+    adminUnlocked,
+    createEmergencyBackup: (reason?: string) => backupBridgeRef.current?.createEmergencyBackup?.(reason),
+    readGpPoliceAppStorage: () => backupBridgeRef.current?.readGpPoliceAppStorage?.() || {},
+    restoreGpPoliceAppStorage: (data: any) => backupBridgeRef.current?.restoreGpPoliceAppStorage?.(data),
+  });
+
 
   const stock = useStockOrdering({
     supplierIngredients,
@@ -721,50 +500,82 @@ export default function Page() {
     setActiveView,
   });
 
-  const finalDishRecipes = useMemo(
-    () => computedRecipes.filter((recipe: any) => recipe.recipeType === "final dish"),
-    [computedRecipes]
-  );
+
+  const {
+    recipeForm,
+    setRecipeForm,
+    recipeSearchTerm,
+    setRecipeSearchTerm,
+    recipeTypeFilter,
+    setRecipeTypeFilter,
+    recipeFolderView,
+    setRecipeFolderView,
+    recipeIngredientSearch,
+    setRecipeIngredientSearch,
+    recipeIngredientSearchRef,
+    recipeImportFileInputRef,
+    selectedRecipeId,
+    setSelectedRecipeId,
+    selectedRecipeView,
+    setSelectedRecipeView,
+    recipeImportText,
+    setRecipeImportText,
+    recipeImportMessage,
+    setRecipeImportMessage,
+    importedRecipeDraft,
+    ingredientLookup,
+    computedRecipes,
+    computedRecipeLookup,
+    filteredRecipes,
+    selectedRecipe,
+    recipeFolderOptions,
+    currentRecipeFolder,
+    quickAddIngredientMatches,
+    finalDishRecipes,
+    recipesWithNoComponents,
+    recipesMissingCategory,
+    finalDishesWithNoSellPrice,
+    needsAttentionItems,
+    totalRecipeCount,
+    totalFinalDishCount,
+    mostRecentRecipe,
+    housePrepRecipes,
+    handleRecipeFormChange,
+    clearRecipeForm,
+    clearImportedRecipeReview,
+    importRecipeFromText,
+    updateImportedRecipeDraftField,
+    updateImportedRecipeDraftLine,
+    ignoreImportedRecipeDraftLine,
+    editImportedRecipeInFullForm,
+    saveImportedRecipeDraft,
+    handleRecipeImportFileUpload,
+    addRecipeComponent,
+    quickAddSupplierIngredientToRecipe,
+    updateRecipeComponent,
+    removeRecipeComponent,
+    saveRecipe,
+    openRecipeView,
+    startNewRecipe,
+    editRecipe,
+    deleteRecipe,
+    recipePreview,
+    downloadRecipeTextFile,
+  } = useRecipeController({
+    supplierIngredients,
+    recipes,
+    setRecipes,
+    orderingMeta,
+    createEmergencyBackupSnapshot: (reason?: string) => backupRef.current(reason),
+    setActiveView,
+  });
 
   const lowStockCount = stock.orderingRows.filter((row: any) => row.suggestedOrder > 0).length;
   const estimatedOrderSpend = stock.orderingRows.reduce((sum: number, row: any) => sum + safeNumber(row.estimatedOrderCost), 0);
-  const housePrepRecipes = computedRecipes.filter((recipe: any) => recipe.recipeType === "ingredient prep");
-
   const totalIngredientCount = supplierIngredients.length;
-  const totalRecipeCount = recipes.length;
-  const totalFinalDishCount = computedRecipes.filter((recipe: any) => recipe.recipeType === "final dish").length;
-
   const mostRecentIngredient =
     supplierIngredients.length > 0 ? supplierIngredients[supplierIngredients.length - 1] : null;
-  const mostRecentRecipe = computedRecipes.length > 0 ? computedRecipes[computedRecipes.length - 1] : null;
-
   const recentSupplierIngredients = supplierIngredients.slice(-4).reverse();
-
-  const recipesWithNoComponents = recipes.filter(
-    (recipe) => !Array.isArray(recipe.components) || recipe.components.length === 0
-  );
-  const recipesMissingCategory = recipes.filter((recipe) => !String(recipe.category || "").trim());
-  const finalDishesWithNoSellPrice = computedRecipes.filter(
-    (recipe: any) => recipe.recipeType === "final dish" && safeNumber(recipe.sellPrice) <= 0
-  );
-
-  const needsAttentionItems = [
-    ...recipesWithNoComponents.map((recipe) => ({
-      id: `no_components_${recipe.id}`,
-      folderKey: "no-components",
-      label: `${recipe.name || "Unnamed recipe"} has no components. That's not a recipe, that's a liability.`,
-    })),
-    ...recipesMissingCategory.map((recipe) => ({
-      id: `missing_category_${recipe.id}`,
-      folderKey: "missing-category",
-      label: `${recipe.name || "Unnamed recipe"} is missing a category. Bit hard to sort the evidence.`,
-    })),
-    ...finalDishesWithNoSellPrice.map((recipe: any) => ({
-      id: `missing_sell_price_${recipe.id}`,
-      folderKey: "no-sell-price",
-      label: `${recipe.name || "Unnamed final dish"} has no sell price. Lovely way to donate margin.`,
-    })),
-  ];
 
   const invoiceWeeklySummary = useMemo(() => {
     const today = new Date();
@@ -930,6 +741,13 @@ export default function Page() {
     restoreGpPoliceAppStorage,
   } = backup;
 
+
+  backupBridgeRef.current = {
+    createEmergencyBackup,
+    readGpPoliceAppStorage,
+    restoreGpPoliceAppStorage,
+  };
+
   const invoice = useInvoiceIntake({
     selectedSupplier,
     supplierIngredients,
@@ -951,903 +769,6 @@ export default function Page() {
     createEmergencyBackupSnapshot,
     preprocessInvoiceImageForOCR,
   });
-
-  const readVenueData = () => {
-    const parsedVenueData = safeParseVenueState<Record<string, any>>(VENUE_STORAGE_KEYS.VENUE_DATA, {});
-
-    if (!parsedVenueData || typeof parsedVenueData !== "object" || Array.isArray(parsedVenueData)) {
-      console.warn("Invalid venue data structure");
-      return {};
-    }
-
-    return parsedVenueData;
-  };
-
-  const saveVenueSnapshotForId = (venueId: string, showSavedMessage = false) => {
-    if (!venueId) return null;
-
-    try {
-      const now = new Date().toISOString();
-      const venueData = readVenueData();
-      venueData[venueId] = {
-        updatedAt: now,
-        data: readGpPoliceAppStorage(),
-      };
-      safeSetLocalStorageValue(VENUE_STORAGE_KEYS.VENUE_DATA, venueData);
-
-      const nextVenueState = {
-        ...venueState,
-        currentVenueId: venueState.currentVenueId || venueId,
-        venues: (venueState.venues || []).map((venue: any) =>
-          venue.id === venueId ? { ...venue, updatedAt: now } : venue
-        ),
-      };
-      saveVenueStateToStorage(nextVenueState);
-      setVenueState(nextVenueState);
-
-      if (showSavedMessage) {
-        setVenueMessage("Venue saved — this kitchen’s evidence is locked in.");
-      }
-
-      return venueData[venueId];
-    } catch (error) {
-      console.error("Failed saving venue snapshot", error);
-      setVenueMessage("Could not save venue snapshot. Nothing was switched.");
-      return null;
-    }
-  };
-
-  const handleSaveVenueSnapshot = () => {
-    createEmergencyBackup("manual_backup");
-    saveVenueSnapshotForId(venueState.currentVenueId, true);
-  };
-
-  const handleSwitchVenue = (nextVenueId: string) => {
-    if (!nextVenueId || nextVenueId === venueState.currentVenueId) return;
-
-    const nextVenue = (venueState.venues || []).find((venue: any) => venue.id === nextVenueId);
-    if (!nextVenue) return;
-
-    const confirmed = window.confirm(`Switch to ${getVenueDisplayName(nextVenue)}? GP Police will save this kitchen first, then load the selected venue.`);
-    if (!confirmed) return;
-
-    createEmergencyBackup("switch_venue");
-    saveVenueSnapshotForId(venueState.currentVenueId, false);
-
-    const venueData = readVenueData();
-    restoreGpPoliceAppStorage(venueData[nextVenueId]?.data || {});
-
-    const now = new Date().toISOString();
-    const nextVenueState = {
-      ...venueState,
-      currentVenueId: nextVenueId,
-      venues: (venueState.venues || []).map((venue: any) =>
-        venue.id === nextVenueId ? { ...venue, updatedAt: now } : venue
-      ),
-    };
-    saveVenueStateToStorage(nextVenueState);
-    window.location.reload();
-  };
-
-  const handleCreateVenue = () => {
-    const venueName = window.prompt("Name this venue:");
-    const cleanedVenueName = String(venueName || "").trim();
-    if (!cleanedVenueName) return;
-
-    createEmergencyBackup("create_venue");
-    saveVenueSnapshotForId(venueState.currentVenueId, false);
-
-    const now = new Date().toISOString();
-    const newVenue = {
-      id: `venue_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      name: cleanedVenueName,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    GP_POLICE_APP_KEYS.forEach((key) => localStorage.removeItem(key));
-
-    const nextVenueState = {
-      currentVenueId: newVenue.id,
-      venues: [...(venueState.venues || []), newVenue],
-    };
-    saveVenueStateToStorage(nextVenueState);
-
-    const venueData = readVenueData();
-    venueData[newVenue.id] = {
-      updatedAt: now,
-      data: {},
-    };
-    safeSetLocalStorageValue(VENUE_STORAGE_KEYS.VENUE_DATA, venueData);
-    window.location.reload();
-  };
-
-  const handleRenameCurrentVenue = () => {
-    if (!adminUnlocked) {
-      setVenueMessage("Unlock admin before renaming a venue.");
-      return;
-    }
-
-    const currentVenueId = String(venueState.currentVenueId || "");
-    const currentVenueRecord = (venueState.venues || []).find((venue: any) => venue.id === currentVenueId);
-
-    if (!currentVenueId || !currentVenueRecord) {
-      setVenueMessage("No current venue found to rename.");
-      return;
-    }
-
-    const venueName = window.prompt("Rename this venue:", getVenueDisplayName(currentVenueRecord));
-    if (venueName === null) return;
-
-    const cleanedVenueName = String(venueName || "").trim();
-    if (!cleanedVenueName) {
-      setVenueMessage("Venue name cannot be blank.");
-      return;
-    }
-
-    createEmergencyBackup("rename_venue");
-
-    const now = new Date().toISOString();
-    const nextVenueState = {
-      ...venueState,
-      currentVenueId,
-      venues: (venueState.venues || []).map((venue: any) =>
-        venue.id === currentVenueId ? { ...venue, name: cleanedVenueName, updatedAt: now } : venue
-      ),
-    };
-
-    const saved = saveVenueStateToStorage(nextVenueState);
-    if (!saved) {
-      setVenueMessage("Rename blocked — venue storage failed validation.");
-      return;
-    }
-
-    setVenueState(nextVenueState);
-    setVenueMessage("Venue renamed safely.");
-  };
-
-  const handleDeleteCurrentVenue = () => {
-    if (!adminUnlocked) {
-      setVenueMessage("Unlock admin before deleting a venue.");
-      return;
-    }
-
-    const venues = Array.isArray(venueState.venues) ? venueState.venues : [];
-    const currentVenueId = String(venueState.currentVenueId || "");
-    const currentVenueRecord = venues.find((venue: any) => venue.id === currentVenueId);
-
-    if (!currentVenueId || !currentVenueRecord) {
-      setVenueMessage("No current venue found to delete.");
-      return;
-    }
-
-    if (venues.length <= 1) {
-      setVenueMessage("Cannot delete the last venue. GP Police needs one safe hideout.");
-      return;
-    }
-
-    const fallbackVenue = venues.find((venue: any) => venue.id !== currentVenueId);
-    if (!fallbackVenue?.id) {
-      setVenueMessage("Delete blocked — no safe fallback venue found.");
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `Delete ${getVenueDisplayName(currentVenueRecord)}? GP Police will back up first, then switch to ${getVenueDisplayName(fallbackVenue)}.`
-    );
-    if (!confirmed) return;
-
-    createEmergencyBackup("delete_venue");
-    saveVenueSnapshotForId(currentVenueId, false);
-
-    const now = new Date().toISOString();
-    const nextVenueState = {
-      currentVenueId: fallbackVenue.id,
-      venues: venues
-        .filter((venue: any) => venue.id !== currentVenueId)
-        .map((venue: any) => (venue.id === fallbackVenue.id ? { ...venue, updatedAt: now } : venue)),
-    };
-
-    const venueData = readVenueData();
-    delete venueData[currentVenueId];
-    safeSetLocalStorageValue(VENUE_STORAGE_KEYS.VENUE_DATA, venueData);
-
-    const saved = saveVenueStateToStorage(nextVenueState);
-    if (!saved) {
-      setVenueMessage("Delete blocked — venue storage failed validation.");
-      return;
-    }
-
-    restoreGpPoliceAppStorage(venueData[fallbackVenue.id]?.data || {});
-    window.location.reload();
-  };
-
-  const safeBackupFileNamePart = (value: string) => {
-    return String(value || "venue")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "venue";
-  };
-
-  const handleDownloadVenueBackup = () => {
-    const currentVenueId = String(venueState.currentVenueId || "");
-    const currentVenueRecord = (venueState.venues || []).find((venue: any) => venue.id === currentVenueId);
-    const venueData = readVenueData();
-    const savedVenueData = currentVenueId ? venueData[currentVenueId]?.data : null;
-
-    if (!currentVenueId || !savedVenueData) {
-      setVenueMessage("No data to export — save the venue first.");
-      return;
-    }
-
-    const now = new Date().toISOString();
-    const exportPayload = {
-      app: "GP Police",
-      version: "1.0",
-      exportedAt: now,
-      venue: {
-        id: currentVenueId,
-        name: currentVenueRecord?.name || "GP Police Venue",
-      },
-      data: savedVenueData,
-    };
-
-    const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    const dateStamp = now.slice(0, 10);
-    anchor.href = url;
-    anchor.download = `gp-police-backup-${safeBackupFileNamePart(exportPayload.venue.name)}-${dateStamp}.json`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
-    setVenueMessage("Backup downloaded — your kitchen is safe.");
-  };
-
-  const handleVenueBackupFileUpload = (file: File | null) => {
-    if (!file) return;
-
-    const fileName = String(file.name || "").toLowerCase();
-    if (!fileName.endsWith(".json")) {
-      setPendingVenueBackup(null);
-      setVenueMessage("Invalid backup file — not a GP Police export.");
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const parsedBackup = JSON.parse(String(reader.result || ""));
-        if (!parsedBackup || parsedBackup.app !== "GP Police" || !parsedBackup.data || typeof parsedBackup.data !== "object" || Array.isArray(parsedBackup.data)) {
-          setPendingVenueBackup(null);
-          setVenueMessage("Invalid backup file — not a GP Police export.");
-          return;
-        }
-
-        setPendingVenueBackup(parsedBackup);
-        setVenueMessage(`Backup loaded for ${parsedBackup.venue?.name || "Imported Venue"}. Choose how to restore it.`);
-      } catch (error) {
-        console.error("Failed reading venue backup", error);
-        setPendingVenueBackup(null);
-        setVenueMessage("Invalid backup file — not a GP Police export.");
-      }
-    };
-    reader.onerror = () => {
-      setPendingVenueBackup(null);
-      setVenueMessage("Invalid backup file — not a GP Police export.");
-    };
-    reader.readAsText(file);
-  };
-
-  const handleRestoreBackupIntoCurrentVenue = () => {
-    if (!pendingVenueBackup?.data || typeof pendingVenueBackup.data !== "object") {
-      setVenueMessage("Invalid backup file — not a GP Police export.");
-      return;
-    }
-
-    const currentVenueId = String(venueState.currentVenueId || "");
-    if (!currentVenueId) {
-      setVenueMessage("Choose or create a venue before restoring a backup.");
-      return;
-    }
-
-    const confirmed = window.confirm("Restore this backup into the current venue? GP Police will make an emergency backup first.");
-    if (!confirmed) return;
-
-    createEmergencyBackup("manual_backup");
-    restoreGpPoliceAppStorage(pendingVenueBackup.data);
-
-    const now = new Date().toISOString();
-    const venueData = readVenueData();
-    venueData[currentVenueId] = {
-      updatedAt: now,
-      data: pendingVenueBackup.data,
-    };
-    safeSetLocalStorageValue(VENUE_STORAGE_KEYS.VENUE_DATA, venueData);
-
-    const nextVenueState = {
-      ...venueState,
-      venues: (venueState.venues || []).map((venue: any) =>
-        venue.id === currentVenueId ? { ...venue, updatedAt: now } : venue
-      ),
-    };
-    saveVenueStateToStorage(nextVenueState);
-    window.location.reload();
-  };
-
-  const handleImportBackupAsNewVenue = () => {
-    if (!pendingVenueBackup?.data || typeof pendingVenueBackup.data !== "object") {
-      setVenueMessage("Invalid backup file — not a GP Police export.");
-      return;
-    }
-
-    const importedVenueName = String(pendingVenueBackup.venue?.name || "Imported Venue").trim() || "Imported Venue";
-    const confirmed = window.confirm(`Import ${importedVenueName} as a new venue? GP Police will make an emergency backup first.`);
-    if (!confirmed) return;
-
-    createEmergencyBackup("manual_backup");
-    saveVenueSnapshotForId(venueState.currentVenueId, false);
-
-    const now = new Date().toISOString();
-    const newVenue = {
-      id: `venue_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      name: `${importedVenueName} (Imported)`,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    const nextVenueState = {
-      currentVenueId: newVenue.id,
-      venues: [...(venueState.venues || []), newVenue],
-    };
-    saveVenueStateToStorage(nextVenueState);
-
-    const venueData = readVenueData();
-    venueData[newVenue.id] = {
-      updatedAt: now,
-      data: pendingVenueBackup.data,
-    };
-    safeSetLocalStorageValue(VENUE_STORAGE_KEYS.VENUE_DATA, venueData);
-
-    restoreGpPoliceAppStorage(pendingVenueBackup.data);
-    window.location.reload();
-  };
-
-  const handleRecipeFormChange = (field: string, value: any) => {
-    setRecipeForm((previous: any) => ({
-      ...previous,
-      [field]: value,
-    }));
-  };
-
-  const clearRecipeForm = () => {
-    const hasContent =
-      recipeForm.name ||
-      recipeForm.category ||
-      recipeForm.yieldAmount ||
-      recipeForm.portionSize ||
-      recipeForm.sellPrice ||
-      recipeForm.components.length > 0;
-
-    if (hasContent) {
-      const confirmed = window.confirm("Clear this recipe form? All that hard work in the bin?");
-      if (!confirmed) return;
-    }
-
-    setRecipeForm(defaultRecipeForm);
-  };
-
-  const clearImportedRecipeReview = () => {
-    setRecipeImportText("");
-    setImportedRecipeDraft(null);
-    setRecipeImportMessage("");
-    if (recipeImportFileInputRef.current) {
-      recipeImportFileInputRef.current.value = "";
-    }
-  };
-
-  const importRecipeFromText = () => {
-    setImportedRecipeDraft(null);
-    const draft = buildImportedRecipeDraftFromText(recipeImportText, supplierIngredients, recipeForm.recipeType);
-
-    if (!draft) {
-      setRecipeImportMessage("Paste a recipe in first. Even GP Police can't cost thin air.");
-      window.alert("Paste a recipe in first. Even GP Police App can't cost thin air.");
-      return;
-    }
-
-    if (!draft.method && draft.lines.length === 0) {
-      setImportedRecipeDraft(null);
-      setRecipeImportMessage("Only the recipe name was recognised. Paste title, ingredients, and method on separate lines.");
-      window.alert("Only the recipe name was recognised. Paste title, ingredients, and method on separate lines.");
-      return;
-    }
-
-    const matchedCount = draft.lines.filter((line: any) => line.status === "matched").length;
-    const attentionCount = draft.lines.filter((line: any) => line.status !== "matched" && line.status !== "ignored").length;
-    setImportedRecipeDraft(draft);
-    setRecipeImportMessage(`Recipe imported. ${matchedCount} line${matchedCount === 1 ? "" : "s"} matched, ${attentionCount} need attention. Check the lines below, then save.`);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const updateImportedRecipeDraftField = (field: string, value: any) => {
-    setImportedRecipeDraft((previous: any) => previous ? { ...previous, [field]: value } : previous);
-  };
-
-  const updateImportedRecipeDraftLine = (lineId: string, field: string, value: any) => {
-    setImportedRecipeDraft((previous: any) => {
-      if (!previous) return previous;
-      const lines = previous.lines.map((line: any) => {
-        if (line.id !== lineId) return line;
-
-        if (field === "matchedIngredientId") {
-          const matchedIngredient = supplierIngredients.find((ingredient: any) => ingredient.id === value);
-          return {
-            ...line,
-            matchedIngredientId: value || null,
-            matchedIngredientName: matchedIngredient?.name || null,
-            ingredientName: matchedIngredient?.name || line.ingredientName,
-            status: value ? (line.quantity ? "matched" : "needs_qty") : "needs_match",
-          };
-        }
-
-        const nextLine = { ...line, [field]: value };
-        if (field === "quantity" || field === "unit" || field === "ingredientName") {
-          nextLine.status = nextLine.matchedIngredientId
-            ? safeNumber(nextLine.quantity) > 0
-              ? "matched"
-              : "needs_qty"
-            : "needs_match";
-        }
-        return nextLine;
-      });
-
-      return { ...previous, lines };
-    });
-  };
-
-  const ignoreImportedRecipeDraftLine = (lineId: string) => {
-    setImportedRecipeDraft((previous: any) => {
-      if (!previous) return previous;
-      return {
-        ...previous,
-        lines: previous.lines.map((line: any) =>
-          line.id === lineId ? { ...line, status: line.status === "ignored" ? (line.matchedIngredientId ? "matched" : "needs_match") : "ignored" } : line
-        ),
-      };
-    });
-  };
-
-  const importedDraftToRecipeForm = (draft: any) => {
-    const recipeType = normalizeImportedRecipeType(draft.type);
-    const components = (draft.lines || [])
-      .filter((line: any) => line.status !== "ignored")
-      .map((line: any) => ({
-        id: `component_import_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-        componentType: "supplier",
-        linkedId: line.matchedIngredientId || "",
-        quantity: line.quantity === "" ? "" : safeNumber(line.quantity),
-        unit: normalizeImportedUnitForComponent(line.unit),
-        section: "Imported",
-        importedName: line.ingredientName,
-      }));
-
-    return {
-      ...defaultRecipeForm,
-      name: String(draft.name || "").trim(),
-      recipeType,
-      category: String(draft.category || "").trim(),
-      notes: String(draft.method || "").trim(),
-      yieldAmount: recipeType === "final dish" ? "" : draft.yieldAmount,
-      yieldUnit: draft.yieldUnit || (recipeType === "final dish" ? "each" : "g"),
-      components,
-    };
-  };
-
-  const editImportedRecipeInFullForm = () => {
-    if (!importedRecipeDraft) return;
-    setRecipeForm(importedDraftToRecipeForm(importedRecipeDraft));
-    setImportedRecipeDraft(null);
-    setRecipeImportMessage("Imported recipe moved into the full form. Finish any loose lines, then save.");
-    window.setTimeout(() => {
-      document.getElementById("recipe-full-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 0);
-  };
-
-  const saveImportedRecipeDraft = () => {
-    if (!importedRecipeDraft) return;
-
-    const draft = importedRecipeDraft;
-    const recipeType = normalizeImportedRecipeType(draft.type);
-    if (!String(draft.name || "").trim()) {
-      setRecipeImportMessage("Recipe name required before saving.");
-      return;
-    }
-    if (recipeType !== "final dish" && safeNumber(draft.yieldAmount) <= 0) {
-      setRecipeImportMessage("Yield required before saving this recipe.");
-      return;
-    }
-
-    const activeLines = (draft.lines || []).filter((line: any) => line.status !== "ignored");
-    const unmatchedLines = activeLines.filter((line: any) => !line.matchedIngredientId);
-    if (unmatchedLines.length > 0) {
-      setRecipeImportMessage(`Match ${unmatchedLines.length} ingredient${unmatchedLines.length === 1 ? "" : "s"} before saving.`);
-      return;
-    }
-
-    const invalidQtyLines = activeLines.filter((line: any) => safeNumber(line.quantity) <= 0 || !line.unit || line.unit === "to taste");
-    if (invalidQtyLines.length > 0) {
-      setRecipeImportMessage(`Fix quantity/unit on ${invalidQtyLines.length} line${invalidQtyLines.length === 1 ? "" : "s"} before saving.`);
-      return;
-    }
-
-    const payload = {
-      ...importedDraftToRecipeForm(draft),
-      id: `recipe_${Date.now()}`,
-      name: String(draft.name || "").trim(),
-      category: String(draft.category || "").trim(),
-      notes: String(draft.method || "").trim(),
-      yieldAmount: recipeType === "final dish" ? 1 : safeNumber(draft.yieldAmount),
-      yieldUnit: recipeType === "final dish" ? "each" : draft.yieldUnit,
-      portionSize: 0,
-      sellPrice: 0,
-    };
-
-    createEmergencyBackupSnapshot("save_imported_recipe");
-
-    setRecipes((previous: any) => [...previous, payload]);
-    setImportedRecipeDraft(null);
-    setRecipeImportText("");
-    setRecipeImportMessage("Recipe saved.");
-    setActiveView("recipes");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const handleRecipeImportFileUpload = (file: File | null) => {
-    if (!file) return;
-
-    const fileName = String(file.name || "").toLowerCase();
-    const resetRecipeImportInput = () => {
-      if (recipeImportFileInputRef.current) {
-        recipeImportFileInputRef.current.value = "";
-      }
-    };
-
-    const loadImportedRecipeText = (importedText: string) => {
-      const cleanText = String(importedText || "").trim();
-
-      if (!cleanText) {
-        const message = "Could not read that recipe file. Try saving as .txt or paste the recipe text.";
-        setRecipeImportMessage(message);
-        window.alert(message);
-        resetRecipeImportInput();
-        return;
-      }
-
-      setImportedRecipeDraft(null);
-      setRecipeImportText(cleanText);
-      setRecipeImportMessage("Recipe file loaded. Hit Bring In Recipe Text to review it before saving.");
-      resetRecipeImportInput();
-    };
-
-    if (fileName.endsWith(".doc") && !fileName.endsWith(".docx")) {
-      const message = "Old .doc files are not supported. Save it as .docx or .txt, then import again.";
-      setRecipeImportMessage(message);
-      window.alert(message);
-      resetRecipeImportInput();
-      return;
-    }
-
-    if (fileName.endsWith(".docx")) {
-      const reader = new FileReader();
-
-      reader.onload = async () => {
-        try {
-          const arrayBuffer = reader.result as ArrayBuffer;
-          // @ts-ignore - dynamic Word import dependency is loaded at runtime.
-          const mammothModule = await import("mammoth");
-          const mammothReader = (mammothModule as any).default || mammothModule;
-          const result = await mammothReader.extractRawText({ arrayBuffer });
-          loadImportedRecipeText(result.value || "");
-        } catch (error) {
-          console.error("Could not read Word recipe file", error);
-          const message = "Could not read that Word file. Try saving as .txt or paste the recipe text.";
-          setRecipeImportMessage(message);
-          window.alert(message);
-          resetRecipeImportInput();
-        }
-      };
-
-      reader.onerror = () => {
-        const message = "Could not read that Word file. Try saving as .txt or paste the recipe text.";
-        setRecipeImportMessage(message);
-        window.alert(message);
-        resetRecipeImportInput();
-      };
-
-      reader.readAsArrayBuffer(file);
-      return;
-    }
-
-    if (!fileName.endsWith(".txt")) {
-      const message = "Upload a .txt or .docx recipe file, or paste the recipe text into the box.";
-      setRecipeImportMessage(message);
-      window.alert(message);
-      resetRecipeImportInput();
-      return;
-    }
-
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      loadImportedRecipeText(String(reader.result || ""));
-    };
-
-    reader.onerror = () => {
-      const message = "Could not read that recipe file. Try saving as .txt or paste the recipe text.";
-      setRecipeImportMessage(message);
-      window.alert(message);
-      resetRecipeImportInput();
-    };
-
-    reader.readAsText(file);
-  };
-
-
-  const addRecipeComponent = () => {
-    setRecipeForm((previous: any) => ({
-      ...previous,
-      components: [
-        ...previous.components,
-        {
-          id: `component_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-          componentType: "supplier",
-          linkedId: "",
-          quantity: "",
-          unit: "g",
-          section: "Main",
-        },
-      ],
-    }));
-  };
-
-  const quickAddSupplierIngredientToRecipe = (ingredient: any) => {
-    const derived = getIngredientDerivedValues(ingredient);
-
-    setRecipeForm((previous: any) => ({
-      ...previous,
-      components: [
-        ...previous.components,
-        {
-          id: `component_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-          componentType: "supplier",
-          linkedId: ingredient.id,
-          quantity: "",
-          unit: derived.baseUnit || "g",
-          section: "Main",
-        },
-      ],
-    }));
-
-    setRecipeIngredientSearch("");
-    window.setTimeout(() => recipeIngredientSearchRef.current?.focus(), 0);
-  };
-
-  const updateRecipeComponent = (componentId: string, field: string, value: any) => {
-    setRecipeForm((previous: any) => ({
-      ...previous,
-      components: previous.components.map((component: any) =>
-        component.id === componentId ? { ...component, [field]: value } : component
-      ),
-    }));
-  };
-
-  const removeRecipeComponent = (componentId: string) => {
-    const confirmed = window.confirm("Remove this component? Hope it wasn't carrying the dish.");
-    if (!confirmed) return;
-
-    setRecipeForm((previous: any) => ({
-      ...previous,
-      components: previous.components.filter((component: any) => component.id !== componentId),
-    }));
-  };
-
-  const saveRecipe = (event: FormEvent) => {
-    event.preventDefault();
-
-    if (!recipeForm.name.trim()) {
-      window.alert("Give the recipe a name, mate. We can't cost vibes.");
-      return;
-    }
-
-    if (recipeForm.recipeType !== "final dish" && safeNumber(recipeForm.yieldAmount) <= 0) {
-      window.alert("Put in a real yield. GP Police App needs something to work with.");
-      return;
-    }
-
-    if (recipeForm.components.length === 0) {
-      window.alert("No components? What are we costing here, air?");
-      return;
-    }
-
-
-    const normalizedComponents = recipeForm.components.map((component: any) => ({
-      ...component,
-      quantity: safeNumber(component.quantity),
-      section: String(component.section || "Main").trim() || "Main",
-    }));
-
-    const invalidComponent = normalizedComponents.find(
-      (component: any) => !component.linkedId || safeNumber(component.quantity) <= 0
-    );
-
-    if (invalidComponent) {
-      window.alert("Finish the component picks and quantities first. Half-built jobs get pinched.");
-      return;
-    }
-
-    const payload = {
-      ...recipeForm,
-      id: recipeForm.id || `recipe_${Date.now()}`,
-      name: recipeForm.name.trim(),
-      category: recipeForm.category.trim(),
-      notes: String(recipeForm.notes || "").trim(),
-      yieldAmount: recipeForm.recipeType === "final dish" ? safeNumber(recipeForm.yieldAmount) || 1 : safeNumber(recipeForm.yieldAmount),
-      yieldUnit: recipeForm.recipeType === "final dish" ? recipeForm.yieldUnit || "each" : recipeForm.yieldUnit,
-      portionSize: safeNumber(recipeForm.portionSize),
-      sellPrice: safeNumber(recipeForm.sellPrice),
-      components: normalizedComponents,
-    };
-
-    createEmergencyBackupSnapshot("save_recipe");
-
-    setRecipes((previous: any) => {
-      if (recipeForm.id) {
-        return previous.map((item: any) => (item.id === recipeForm.id ? payload : item));
-      }
-      return [...previous, payload];
-    });
-
-    setRecipeForm(defaultRecipeForm);
-    setSelectedRecipeId(null);
-    setActiveView("recipes");
-  };
-
-  const openRecipeView = (recipeId: string) => {
-    setSelectedRecipeId(recipeId);
-    setSelectedRecipeView("detail");
-    setActiveView("recipeDetail");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const startNewRecipe = () => {
-    setRecipeForm(defaultRecipeForm);
-    setSelectedRecipeId(null);
-    setActiveView("recipeBuilder");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const editRecipe = (recipeId: string) => {
-    const recipe = recipes.find((item: any) => item.id === recipeId);
-    if (!recipe) return;
-
-    setRecipeForm({
-      id: recipe.id,
-      name: recipe.name || "",
-      recipeType: recipe.recipeType || "batch recipe",
-      category: recipe.category || "",
-      notes: recipe.notes || "",
-      yieldAmount: recipe.yieldAmount?.toString() || "",
-      yieldUnit: recipe.yieldUnit || "g",
-      portionSize: recipe.portionSize?.toString() || "",
-      portionUnit: recipe.portionUnit || "g",
-      sellPrice: recipe.sellPrice?.toString() || "",
-      components: Array.isArray(recipe.components)
-        ? recipe.components.map((component: any) => ({
-            ...component,
-            quantity: component.quantity?.toString() || "",
-            section: component.section || "Main",
-          }))
-        : [],
-    });
-
-    setActiveView("recipeBuilder");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const deleteRecipe = (recipeId: string) => {
-    const linkedRecipesCount = recipes.filter((recipe) =>
-      (recipe.components || []).some(
-        (component: any) =>
-          (component.componentType === "batch" || component.componentType === "prep") &&
-          component.linkedId === recipeId
-      )
-    ).length;
-
-    const message =
-      linkedRecipesCount > 0
-        ? `This recipe is linked to ${linkedRecipesCount} other recipe(s). Delete it anyway and start a scene?`
-        : "Delete this recipe? That's brave.";
-
-    const confirmed = window.confirm(message);
-    if (!confirmed) return;
-
-    createEmergencyBackupSnapshot("delete_recipe");
-
-    setRecipes((previous: any) => previous.filter((item: any) => item.id !== recipeId));
-
-    if (recipeForm.id === recipeId) {
-      setRecipeForm(defaultRecipeForm);
-    }
-
-    if (selectedRecipeId === recipeId) {
-      setSelectedRecipeId(null);
-      setSelectedRecipeView("detail");
-      setActiveView("recipes");
-    }
-  };
-
-  const recipePreview = useMemo(() => {
-    const isFinalDish = recipeForm.recipeType === "final dish";
-    const temporaryRecipe = {
-      ...recipeForm,
-      id: recipeForm.id || "preview_recipe",
-      yieldAmount: isFinalDish ? safeNumber(recipeForm.yieldAmount) || 1 : safeNumber(recipeForm.yieldAmount),
-      yieldUnit: isFinalDish ? recipeForm.yieldUnit || "each" : recipeForm.yieldUnit,
-      portionSize: safeNumber(recipeForm.portionSize),
-      sellPrice: safeNumber(recipeForm.sellPrice),
-      components: (recipeForm.components || []).map((component: any) => ({
-        ...component,
-        quantity: safeNumber(component.quantity),
-        section: String(component.section || "Main").trim() || "Main",
-      })),
-    };
-
-    const componentDetails = temporaryRecipe.components.map((component: any) =>
-      buildComponentDetail(component, ingredientLookup, computedRecipeLookup)
-    );
-
-    const totalCost = componentDetails.reduce((sum: number, item: any) => sum + safeNumber(item.lineCost), 0);
-    const recipeBaseValues = isFinalDish
-      ? { baseUnit: "each", costPerBaseUnit: totalCost }
-      : getRecipeCostPerBaseUnit({
-          totalCost,
-          yieldAmount: temporaryRecipe.yieldAmount,
-          yieldUnit: temporaryRecipe.yieldUnit,
-        });
-    const baseUnit = recipeBaseValues.baseUnit;
-    const costPerBaseUnit = recipeBaseValues.costPerBaseUnit;
-    const portionsPerBatch = isFinalDish ? 1 : 0;
-    const costPerPortion = isFinalDish ? totalCost : 0;
-
-    const sellPrice = safeNumber(temporaryRecipe.sellPrice);
-    const foodCostPercent = sellPrice > 0 ? (costPerPortion / sellPrice) * 100 : 0;
-    const grossProfitAmount = sellPrice - costPerPortion;
-    const grossProfitPercent = sellPrice > 0 ? (grossProfitAmount / sellPrice) * 100 : 0;
-    const targetCogsPercent = 26;
-    const targetGpPercent = 74;
-    const targetCogsDecimal = targetCogsPercent / 100;
-    const recommendedSellPrice = isFinalDish && totalCost > 0 ? totalCost / targetCogsDecimal : 0;
-    const isSellPriceBelowRecommendation = isFinalDish && sellPrice > 0 && grossProfitPercent < targetGpPercent;
-
-    return {
-      ...temporaryRecipe,
-      baseUnit,
-      totalCost,
-      costPerBaseUnit,
-      componentDetails,
-      portionsPerBatch,
-      costPerPortion,
-      foodCostPercent,
-      grossProfitAmount,
-      grossProfitPercent,
-      targetCogsPercent,
-      targetGpPercent,
-      recommendedSellPrice,
-      isSellPriceBelowRecommendation,
-    };
-  }, [recipeForm, ingredientLookup, computedRecipeLookup]);
 
   const handleSidebarNavigation = (viewKey: string) => {
     const allowedViewKeys = [
@@ -1903,7 +824,6 @@ export default function Page() {
     }, 250);
   };
 
-  const currentVenue = (Array.isArray(venueState.venues) ? venueState.venues : []).find((venue: any) => venue.id === venueState.currentVenueId) || null;
 
   const handlePasswordSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -2215,49 +1135,6 @@ export default function Page() {
     getInvoiceConfidenceBadgeStyle,
   });
 
-
-  const buildRecipeDownloadText = (recipe: any, mode = "recipe") => {
-    const lines = [
-      `GP Police ${mode === "prep" ? "Prep Sheet" : "Recipe"}`,
-      `Name: ${recipe.name || "Untitled Recipe"}`,
-      `Type: ${recipe.recipeType || "Recipe"}`,
-      recipe.category ? `Category: ${recipe.category}` : "",
-      recipe.recipeType !== "final dish" ? `Yield: ${roundTo(recipe.yieldAmount, 2)} ${recipe.yieldUnit}` : "",
-      recipe.recipeType === "final dish" ? `Sell Price: ${formatCurrency(recipe.sellPrice)}` : "",
-      recipe.recipeType === "final dish" ? `Food Cost %: ${roundTo(recipe.foodCostPercent, 2)}%` : "",
-      recipe.recipeType === "final dish" ? `Gross Profit %: ${roundTo(recipe.grossProfitPercent, 2)}%` : "",
-      `Total Cost: ${formatCurrency(recipe.totalCost)}`,
-      "",
-      "Components:",
-      ...(recipe.componentDetails || []).map((component: any) => {
-        const unitCost = safeNumber(component.quantity) > 0 ? safeNumber(component.lineCost) / safeNumber(component.quantity) : 0;
-        return `- ${component.linkedName || "Unlinked item"}: ${roundTo(component.quantity, 2)} ${component.unit || ""} | Unit Cost ${formatCurrency(unitCost)} | Line Cost ${formatCurrency(component.lineCost)}`;
-      }),
-      "",
-      "Method / Notes:",
-      recipe.notes || "",
-    ];
-
-    return lines.filter((line) => line !== "").join("\n");
-  };
-
-  const downloadRecipeTextFile = (recipe: any, mode = "recipe") => {
-    if (!recipe) return;
-
-    const safeName = String(recipe.name || "recipe")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "") || "recipe";
-    const blob = new Blob([buildRecipeDownloadText(recipe, mode)], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `gp-police-${mode}-${safeName}.txt`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
-  };
 
   const {
     renderRecipesListSection,
