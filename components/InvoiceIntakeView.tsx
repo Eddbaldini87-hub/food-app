@@ -60,9 +60,9 @@ export function InvoiceIntakeView(props: any) {
     handleSaveSupplierMatchMemory
   } = props;
 
-  const [invoiceReviewFilter, setInvoiceReviewFilter] = useState("all");
+  const [invoiceReviewFilter, setInvoiceReviewFilter] = useState("needs_fix");
   const [invoiceReviewSearchTerm, setInvoiceReviewSearchTerm] = useState("");
-  const [invoiceReviewSortKey, setInvoiceReviewSortKey] = useState("original");
+  const [invoiceReviewSortKey, setInvoiceReviewSortKey] = useState("needs_fix_first");
   const [invoiceReviewMode, setInvoiceReviewMode] = useState<"normal" | "compact">(() =>
     typeof window !== "undefined" && window.innerWidth <= 820 ? "compact" : "normal"
   );
@@ -1624,7 +1624,7 @@ export function InvoiceIntakeView(props: any) {
     const problemRow = getFirstInvoiceProblemRow();
 
     if (!problemRow) {
-      setSupplierInvoiceMessage("No obvious invoice problems left. Do one final review, then lock it clean.");
+      setSupplierInvoiceMessage("No obvious invoice problems left. Final eyes, then lock it before the GP slips away.");
       setInvoiceReviewFilter("all");
       return;
     }
@@ -1808,8 +1808,15 @@ export function InvoiceIntakeView(props: any) {
 
     if (rowCount > 0 && rowCount !== lastInvoiceRowCountRef.current && invoiceReviewReadinessSummary.needsFixRowsCount > 0) {
       window.setTimeout(() => {
-        invoiceReviewPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 120);
+        const problemRow = getFirstInvoiceProblemRow();
+        if (problemRow?.id) {
+          setInvoiceFixingRowId(problemRow.id);
+          const rowElement = document.getElementById(`invoice-row-${problemRow.id}`);
+          rowElement?.scrollIntoView({ behavior: "smooth", block: "center" });
+        } else {
+          invoiceReviewPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }, 160);
     }
 
     lastInvoiceRowCountRef.current = rowCount;
@@ -1819,7 +1826,7 @@ export function InvoiceIntakeView(props: any) {
     setInvoiceReviewSearchTerm("");
     setInvoiceReviewFilter("needs_fix");
     setInvoiceReviewSortKey("needs_fix_first");
-    setSupplierInvoiceMessage("Showing only the rows that need your attention.");
+    setSupplierInvoiceMessage("Fix lane on. Only the dodgy rows are showing — clean the mess, then lock it.");
   };
 
   const autoApproveHighConfidenceInvoiceRows = () => {

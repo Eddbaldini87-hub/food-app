@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+
 export function InvoiceReviewRowCard(props: any) {
   const {
     styles,
@@ -123,6 +125,35 @@ export function InvoiceReviewRowCard(props: any) {
   const isFixPanelOpen = invoiceFixingRowId === row.id;
   const canLearnSupplierMatch = Boolean(String(row?.linkedIngredientId || "").trim()) && Boolean(String(row?.supplierMatchKey || "").trim());
   const supplierMatchLearningSaved = Boolean(savedSupplierMatchRows[String(row?.id || row?.supplierMatchKey || "")]);
+  const invoiceRowNameInputRef = useRef<HTMLInputElement | null>(null);
+
+  const moveToNextInvoiceProblem = () => {
+    if (typeof handleFixNextInvoiceProblem !== "function") return;
+    window.setTimeout(() => handleFixNextInvoiceProblem(), 220);
+  };
+
+  const updateRowAndMoveNext = (field: string, value: any) => {
+    updateSupplierInvoiceRow(row.id, field, value);
+    moveToNextInvoiceProblem();
+  };
+
+  const setRowStatusAndMoveNext = (nextStatus: "needs_match" | "matched" | "create_new" | "ignore") => {
+    setSupplierInvoiceRowStatus(row.id, nextStatus);
+    moveToNextInvoiceProblem();
+  };
+
+  const markRowCogsAndMoveNext = (nextCogsType: any) => {
+    updateSupplierInvoiceRow(row.id, "cogsCategory", nextCogsType);
+    if (nextCogsType === "consumable_cogs" || nextCogsType === "non_cogs") {
+      updateSupplierInvoiceRow(row.id, "selected", true);
+    }
+    moveToNextInvoiceProblem();
+  };
+
+  useEffect(() => {
+    if (!isFixPanelOpen) return;
+    window.setTimeout(() => invoiceRowNameInputRef.current?.focus(), 80);
+  }, [isFixPanelOpen, row?.id]);
 
   return (
     <>
@@ -169,6 +200,24 @@ export function InvoiceReviewRowCard(props: any) {
         ) : (
           <div style={styles.infoCardSubtext}>Raw line: {String(row.rawLine || "")}</div>
         )}
+        <div
+          style={{
+            ...styles.infoCard,
+            marginTop: 10,
+            border: reviewState.level === "low" ? "1px solid rgba(248, 113, 113, 0.48)" : "1px solid rgba(255, 255, 255, 0.12)",
+            background: reviewState.level === "low" ? "rgba(127, 29, 29, 0.12)" : "rgba(15, 23, 42, 0.62)",
+          }}
+        >
+          <div style={styles.infoCardTitle}>{reviewState.level === "low" ? "💀 Fix this row" : "⚡ Quick row actions"}</div>
+          <div style={styles.infoCardSubtext}>One tap. No ceremony. Fix it and GP Police jumps to the next problem.</div>
+          <div style={{ ...styles.buttonRow, marginTop: 10 }}>
+            <button type="button" style={styles.secondaryButton} onClick={() => markRowCogsAndMoveNext("consumable_cogs")}>Mark Consumable</button>
+            <button type="button" style={styles.secondaryButton} onClick={() => markRowCogsAndMoveNext("food_cogs")}>Mark Food</button>
+            <button type="button" style={styles.secondaryButton} onClick={() => markRowCogsAndMoveNext("non_cogs")}>Non-COGS</button>
+            <button type="button" style={styles.secondaryButton} onClick={() => setRowStatusAndMoveNext("ignore")}>Bin This Line</button>
+            <button type="button" style={styles.primaryButton} onClick={() => setInvoiceFixingRowId(isFixPanelOpen ? null : row.id)}>{isFixPanelOpen ? "Close Fix" : "Open Fix"}</button>
+          </div>
+        </div>
         <div style={{ ...styles.buttonRow, alignItems: "center" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             {!isCompactReviewMode ? (
@@ -212,9 +261,9 @@ export function InvoiceReviewRowCard(props: any) {
         </div>
       </div>
       <div style={styles.buttonRow}>
-        <button type="button" style={row.status === "matched" ? styles.primaryButton : styles.secondaryButton} onClick={() => setSupplierInvoiceRowStatus(row.id, "matched")}>Matched</button>
-        <button type="button" style={row.status === "create_new" ? styles.primaryButton : styles.secondaryButton} onClick={() => setSupplierInvoiceRowStatus(row.id, "create_new")}>Create New</button>
-        <button type="button" style={row.status === "ignore" ? styles.primaryButton : styles.secondaryButton} onClick={() => setSupplierInvoiceRowStatus(row.id, "ignore")}>Ignore Line</button>
+        <button type="button" style={row.status === "matched" ? styles.primaryButton : styles.secondaryButton} onClick={() => setRowStatusAndMoveNext("matched")}>Matched</button>
+        <button type="button" style={row.status === "create_new" ? styles.primaryButton : styles.secondaryButton} onClick={() => setRowStatusAndMoveNext("create_new")}>Create New</button>
+        <button type="button" style={row.status === "ignore" ? styles.primaryButton : styles.secondaryButton} onClick={() => setRowStatusAndMoveNext("ignore")}>Ignore Line</button>
         {canLearnSupplierMatch ? (
           <button type="button" style={supplierMatchLearningSaved ? styles.primaryButton : styles.secondaryButton} onClick={() => handleLearnSupplierMatchFromRow(row)}>
             {supplierMatchLearningSaved ? "Saved ✓" : "Learn Match"}
@@ -348,7 +397,7 @@ export function InvoiceReviewRowCard(props: any) {
           <div style={styles.formGrid}>
         <div style={styles.formGroup}>
           <label style={styles.label}>Item Name</label>
-          <input value={row.name || ""} onChange={(event: any) => updateSupplierInvoiceRow(row.id, "name", event.target.value)} style={styles.input} />
+          <input ref={invoiceRowNameInputRef} value={row.name || ""} onChange={(event: any) => updateSupplierInvoiceRow(row.id, "name", event.target.value)} style={styles.input} />
         </div>
         <div style={styles.formGroup}>
           <label style={styles.label}>Code</label>
@@ -388,7 +437,7 @@ export function InvoiceReviewRowCard(props: any) {
           <label style={styles.label}>COGS Category</label>
           <select
             value={getInvoiceRowCogsType(row)}
-            onChange={(event: any) => updateSupplierInvoiceRow(row.id, "cogsCategory", event.target.value)}
+            onChange={(event: any) => markRowCogsAndMoveNext(event.target.value)}
             style={styles.input}
           >
             <option value="food_cogs">Food COGS</option>
@@ -399,7 +448,7 @@ export function InvoiceReviewRowCard(props: any) {
         </div>
         <div style={styles.formGroup}>
           <label style={styles.label}>Match Ingredient</label>
-          <select value={row.linkedIngredientId || ""} onChange={(event: any) => updateSupplierInvoiceRow(row.id, "linkedIngredientId", event.target.value)} style={styles.input}>
+          <select value={row.linkedIngredientId || ""} onChange={(event: any) => updateRowAndMoveNext("linkedIngredientId", event.target.value)} style={styles.input}>
             <option value="">Needs match</option>
             {(Array.isArray(supplierIngredients) ? supplierIngredients : [])
               .filter((ingredient: any) => !selectedSupplier?.name || String(ingredient.supplierName || orderingMeta[ingredient.id]?.supplierName || "").trim() === selectedSupplier.name)
@@ -416,7 +465,7 @@ export function InvoiceReviewRowCard(props: any) {
               {String(row.name || "Unnamed item")} · {formatCurrency(row.purchasePrice || row.lineTotal || row.unitPrice)} · {String(row.purchaseUnit || "box")} · {String(row.amountInPurchaseUnit || "1")} x {String(row.sizePerItem || "1")} {String(row.sizeUnit || "each")}
             </div>
             {getInvoiceRowCogsType(row) === "food_cogs" ? (
-              <button type="button" style={styles.primaryButton} onClick={() => handleCreateIngredientFromInvoiceRow(row.id)}>Create Ingredient From Row</button>
+              <button type="button" style={styles.primaryButton} onClick={() => { handleCreateIngredientFromInvoiceRow(row.id); moveToNextInvoiceProblem(); }}>Create Ingredient From Row</button>
             ) : (
               <div style={styles.infoCardSubtext}>Consumables and unknown rows do not create recipe ingredients. Change this row to Food COGS first if it belongs in recipes.</div>
             )}
