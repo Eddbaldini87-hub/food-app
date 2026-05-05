@@ -12,6 +12,10 @@ export function Dashboard(props: any) {
   const gpImpactSummary = props.gpImpactSummary || {};
   const gpBiggestLosers = Array.isArray(gpImpactSummary.biggestLosers) ? gpImpactSummary.biggestLosers : [];
   const gpAlerts = Array.isArray(gpImpactSummary.alerts) ? gpImpactSummary.alerts : [];
+  const gpActions = Array.isArray(gpImpactSummary.recommendedActions) ? gpImpactSummary.recommendedActions : [];
+  const recentWins = Array.isArray(gpImpactSummary.recentWins) ? gpImpactSummary.recentWins : [];
+  const damageTrend = gpImpactSummary.damageTrend || {};
+  const proofEngine = gpImpactSummary.proofEngine || {};
   const recipesWithNoComponents = Array.isArray(props.recipesWithNoComponents) ? props.recipesWithNoComponents : [];
   const finalDishesWithNoSellPrice = Array.isArray(props.finalDishesWithNoSellPrice) ? props.finalDishesWithNoSellPrice : [];
   const posSales = Array.isArray(props.posSales) ? props.posSales : [];
@@ -135,6 +139,12 @@ export function Dashboard(props: any) {
     marginTop: 6,
   };
 
+  const proofToneStyle = proofEngine.confidence === "high"
+    ? { border: "1px solid rgba(34, 197, 94, 0.42)", background: "rgba(34, 197, 94, 0.10)" }
+    : proofEngine.confidence === "medium" || proofEngine.confidence === "early"
+      ? { border: "1px solid rgba(245, 158, 11, 0.42)", background: "rgba(245, 158, 11, 0.10)" }
+      : { border: "1px solid rgba(148, 163, 184, 0.26)", background: "rgba(15, 23, 42, 0.55)" };
+
   return (
     <div style={styles.pageWrapper}>
       <div style={styles.pageHeader}>
@@ -151,6 +161,50 @@ export function Dashboard(props: any) {
           <button type="button" style={heroButtonStyle} onClick={nextAction.action}>
             {nextAction.button}
           </button>
+        </div>
+      </div>
+
+      <div style={{ ...styles.card, ...proofToneStyle }}>
+        <div style={styles.dashboardSectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>🧾 Proof Engine</h2>
+            <p style={styles.sectionSubtitle}>Shows whether GP Police has enough evidence to prove problem → action → result.</p>
+          </div>
+          <div style={styles.infoCardSubtext}>{String(proofEngine.confidence || "low").toUpperCase()} confidence</div>
+        </div>
+        <div style={styles.infoGrid}>
+          <div style={styles.infoCard}>
+            <div style={styles.infoCardTitle}>{proofEngine.headline || "Needs live data"}</div>
+            <div style={styles.infoCardSubtext}>{proofEngine.trustMessage || "Lock invoices and connect POS sales to strengthen proof."}</div>
+          </div>
+          <div style={styles.infoCard}>
+            <div style={styles.infoCardTitle}>Trend</div>
+            <div style={styles.infoCardText}>{damageTrend.proofLabel || "Waiting"}</div>
+            <div style={styles.infoCardSubtext}>{damageTrend.direction ? `Direction: ${damageTrend.direction}` : "Needs more weeks"}</div>
+          </div>
+          <div style={styles.infoCard}>
+            <div style={styles.infoCardTitle}>Latest movement</div>
+            <div style={styles.infoCardText}>{formatMoney(damageTrend.change || 0)}</div>
+            <div style={styles.infoCardSubtext}>Compared with previous tracked period.</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ ...styles.card, border: "1px solid rgba(34, 197, 94, 0.30)", background: "rgba(6, 78, 59, 0.14)" }}>
+        <div style={styles.dashboardSectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>✅ Recent Wins</h2>
+            <p style={styles.sectionSubtitle}>Keeps the loop closed: what the system found, proved, or improved.</p>
+          </div>
+        </div>
+        <div style={styles.infoGrid}>
+          {recentWins.slice(0, 4).map((win: any, index: number) => (
+            <div key={`${win.title}-${index}`} style={styles.infoCard}>
+              <div style={styles.infoCardTitle}>{win.title}</div>
+              <div style={styles.infoCardSubtext}>{win.detail}</div>
+              <div style={{ ...styles.infoCardSubtext, marginTop: 8 }}>Confidence: {String(win.confidence || "low").toUpperCase()}</div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -215,7 +269,6 @@ export function Dashboard(props: any) {
         </div>
       </div>
 
-
       <div style={{ ...styles.card, border: "1px solid rgba(248, 113, 113, 0.32)", background: "rgba(127, 29, 29, 0.14)" }}>
         <div style={styles.dashboardSectionHeader}>
           <div>
@@ -243,6 +296,21 @@ export function Dashboard(props: any) {
             <div style={styles.infoCardText}>{formatMoney(gpImpactSummary.totalPerServeDamage)}</div>
           </div>
         </div>
+
+        {gpActions.length > 0 ? (
+          <div style={{ marginTop: 14 }}>
+            <div style={styles.infoCardTitle}>Recommended Actions</div>
+            <div style={{ ...styles.infoGrid, marginTop: 10 }}>
+              {gpActions.slice(0, 4).map((action: any, index: number) => (
+                <div key={`${action.title}-${index}`} style={styles.infoCard}>
+                  <div style={styles.infoCardTitle}>{action.title}</div>
+                  <div style={styles.infoCardText}>{action.action}</div>
+                  <div style={styles.infoCardSubtext}>{action.reason}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {gpAlerts.length === 0 ? (
           <div style={{ ...(styles.emptyState || styles.infoCardText), marginTop: 12 }}>Lock invoices against linked ingredients and GP Police will start calling out menu GP impact here.</div>

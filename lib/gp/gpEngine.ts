@@ -182,6 +182,117 @@ const buildDecisionActions = (affectedRecipes: any[], priceEvents: any[], totalW
   return actions.slice(0, 6);
 };
 
+const buildDamageTrend = (lockedInvoiceHistory: any[], affectedRecipes: any[]) => {
+  const weekTotals: Record<string, number> = {};
+
+  (Array.isArray(lockedInvoiceHistory) ? lockedInvoiceHistory : []).forEach((invoice: any) => {
+    const dateKey = String(invoice?.date || invoice?.invoiceDate || invoice?.createdAt || "").slice(0, 10);
+    if (!dateKey) return;
+    const weekKey = dateKey.slice(0, 7);
+    const invoiceDamage = safeNumber(invoice?.totalDamage ?? invoice?.foodCogsTotal ?? 0);
+    if (invoiceDamage > 0) {
+      weekTotals[weekKey] = safeNumber(weekTotals[weekKey]) + invoiceDamage;
+    }
+  });
+
+  const recipeDamage = affectedRecipes.reduce((sum: number, recipe: any) => sum + safeNumber(recipe.estimatedWeeklyDamage), 0);
+  const weeks = Object.keys(weekTotals).sort().slice(-6).map((weekKey) => ({ weekKey, damage: weekTotals[weekKey] }));
+  const last = weeks[weeks.length - 1]?.damage || 0;
+  const previous = weeks[weeks.length - 2]?.damage || 0;
+  const change = last - previous;
+
+  const direction = change > 1 ? "rising" : change < -1 ? "improving" : "stable";
+  const confidence = weeks.length >= 3 ? "high" : weeks.length >= 1 || recipeDamage > 0 ? "medium" : "low";
+
+  return {
+    weeks,
+    latestDamage: last,
+    previousDamage: previous,
+    change,
+    direction,
+    confidence,
+    proofLabel: direction === "improving" ? "Damage improving" : direction === "rising" ? "Damage rising" : "Damage stable",
+  };
+};
+
+const buildRecentWins = (affectedRecipes: any[], priceEvents: any[], damageTrend: any) => {
+  const wins: any[] = [];
+
+  if (damageTrend.direction === "improving" && Math.abs(safeNumber(damageTrend.change)) > 0) {
+    wins.push({
+      title: "Damage reduced",
+      detail: `Latest tracked damage is down ${formatMoneyInline(Math.abs(damageTrend.change))} from the previous period.`,
+      value: Math.abs(safeNumber(damageTrend.change)),
+      confidence: damageTrend.confidence,
+    });
+  }
+
+  const linkedImpactCount = affectedRecipes.filter((recipe: any) => safeNumber(recipe.estimatedCostIncreasePerServe) > 0).length;
+  if (linkedImpactCount > 0) {
+    wins.push({
+      title: "Menu impact mapped",
+      detail: `${linkedImpactCount} affected dish${linkedImpactCount === 1 ? "" : "es"} now have supplier damage connected to menu GP.`,
+      value: linkedImpactCount,
+      confidence: "medium",
+    });
+  }
+
+  const watchedIngredients = priceEvents.filter((event: any) => safeNumber(event.percentIncrease) >= 5).length;
+  if (watchedIngredients > 0) {
+    wins.push({
+      title: "Supplier price watch active",
+      detail: `${watchedIngredients} supplier item${watchedIngredients === 1 ? "" : "s"} flagged before the leak disappears into weekly GP.`,
+      value: watchedIngredients,
+      confidence: "medium",
+    });
+  }
+
+  if (wins.length === 0) {
+    wins.push({
+      title: "Proof engine waiting for data",
+      detail: "Lock a few invoices, link food rows, and upload POS sales to prove before-vs-after movement.",
+      value: 0,
+      confidence: "low",
+    });
+  }
+
+  return wins.slice(0, 4);
+};
+
+const buildProofEngine = (affectedRecipes: any[], priceEvents: any[], damageTrend: any, hasPosSalesEstimate: boolean) => {
+  const dataPoints = [
+    affectedRecipes.length > 0,
+    priceEvents.length > 0,
+    hasPosSalesEstimate,
+    Array.isArray(damageTrend.weeks) && damageTrend.weeks.length >= 2,
+  ].filter(Boolean).length;
+
+  const confidence = dataPoints >= 3 ? "high" : dataPoints >= 2 ? "medium" : dataPoints >= 1 ? "early" : "low";
+  const headline = confidence === "high"
+    ? "Strong proof forming"
+    : confidence === "medium"
+      ? "Proof engine active"
+      : confidence === "early"
+        ? "Early proof forming"
+        : "Needs live data";
+
+  const missing: string[] = [];
+  if (affectedRecipes.length === 0) missing.push("linked recipe impacts");
+  if (priceEvents.length === 0) missing.push("price movement events");
+  if (!hasPosSalesEstimate) missing.push("POS sales volume");
+  if (!Array.isArray(damageTrend.weeks) || damageTrend.weeks.length < 2) missing.push("multi-week history");
+
+  return {
+    confidence,
+    headline,
+    dataPoints,
+    missing,
+    trustMessage: missing.length
+      ? `Add ${missing.slice(0, 2).join(" + ")} for stronger proof.`
+      : "Enough data exists to show problem, action, and result movement.",
+  };
+};
+
 export function buildGpImpactSummary(args: {
   supplierIngredients: any[];
   computedRecipes: any[];
@@ -265,6 +376,7 @@ export function buildGpImpactSummary(args: {
   const biggestIngredientRisks = priceEvents.slice(0, 8);
   const totalWeeklyDamage = affectedRecipes.reduce((sum: number, recipe: any) => sum + safeNumber(recipe.estimatedWeeklyDamage), 0);
   const totalPerServeDamage = affectedRecipes.reduce((sum: number, recipe: any) => sum + safeNumber(recipe.estimatedCostIncreasePerServe), 0);
+  const hasPosSalesEstimate = affectedRecipes.some((recipe: any) => safeNumber(recipe.weeklySalesEstimate) > 0);
 
   const baseAlerts = [
     ...biggestIngredientRisks.slice(0, 5).map((event: any) => ({
@@ -299,6 +411,10 @@ export function buildGpImpactSummary(args: {
         }]
       : [];
 
+  const damageTrend = buildDamageTrend(lockedInvoiceHistory, affectedRecipes);
+  const recentWins = buildRecentWins(affectedRecipes, biggestIngredientRisks, damageTrend);
+  const proofEngine = buildProofEngine(affectedRecipes, biggestIngredientRisks, damageTrend, hasPosSalesEstimate);
+
   const alerts = uniqueAlerts([...totalDamageAlert, ...baseAlerts]).slice(0, 10);
   const recommendedActions = buildDecisionActions(affectedRecipes, biggestIngredientRisks, totalWeeklyDamage);
   const dangerAlertCount = alerts.filter((alert: any) => alert.level === "danger").length;
@@ -326,10 +442,13 @@ export function buildGpImpactSummary(args: {
     decisionSummary,
     dangerAlertCount,
     warningAlertCount,
+    recentWins,
+    damageTrend,
+    proofEngine,
     totalWeeklyDamage,
     totalPerServeDamage,
     affectedRecipeCount: affectedRecipes.length,
     affectedIngredientCount: biggestIngredientRisks.length,
-    hasPosSalesEstimate: affectedRecipes.some((recipe: any) => safeNumber(recipe.weeklySalesEstimate) > 0),
+    hasPosSalesEstimate,
   };
 }
