@@ -5,7 +5,7 @@ export function Dashboard(props: any) {
   const finalDishes = Array.isArray(props.computedRecipes)
     ? props.computedRecipes.filter((recipe: any) => recipe.recipeType === "final dish")
     : [];
-  const ingredients = Array.isArray(props.supplierSupplier Lines) ? props.supplierSupplier Lines : [];
+  const ingredients = Array.isArray(props.supplierSupplierLines) ? props.supplierSupplierLines : [];
   const invoiceRecords = Array.isArray(props.invoiceSpendRecords) ? props.invoiceSpendRecords : [];
   const stockDamageReport = Array.isArray(props.stockDamageReport) ? props.stockDamageReport : [];
   const gpDamageSummary = props.gpDamageSummary || {};
@@ -14,7 +14,7 @@ export function Dashboard(props: any) {
   const gpAlerts = Array.isArray(gpImpactSummary.alerts) ? gpImpactSummary.alerts : [];
   const gpActions = Array.isArray(gpImpactSummary.recommendedActions) ? gpImpactSummary.recommendedActions : [];
   const recentWins = Array.isArray(gpImpactSummary.recentWins) ? gpImpactSummary.recentWins : [];
-  const damageDamage Trend = gpImpactSummary.damageDamage Trend || {};
+  const damageDamageTrend = gpImpactSummary.damageDamageTrend || {};
   const proofEngine = gpImpactSummary.proofEngine || {};
   const recipesWithNoComponents = Array.isArray(props.recipesWithNoComponents) ? props.recipesWithNoComponents : [];
   const finalDishesWithNoSellPrice = Array.isArray(props.finalDishesWithNoSellPrice) ? props.finalDishesWithNoSellPrice : [];
@@ -179,12 +179,12 @@ export function Dashboard(props: any) {
           </div>
           <div style={styles.infoCard}>
             <div style={styles.infoCardTitle}>Damage Trend</div>
-            <div style={styles.infoCardText}>{damageDamage Trend.proofLabel || "Waiting"}</div>
-            <div style={styles.infoCardSubtext}>{damageDamage Trend.direction ? `Direction: ${damageDamage Trend.direction}` : "Needs more weeks"}</div>
+            <div style={styles.infoCardText}>{damageDamageTrend.proofLabel || "Waiting"}</div>
+            <div style={styles.infoCardSubtext}>{damageDamageTrend.direction ? `Direction: ${damageDamageTrend.direction}` : "Needs more weeks"}</div>
           </div>
           <div style={styles.infoCard}>
             <div style={styles.infoCardTitle}>Latest Punch</div>
-            <div style={styles.infoCardText}>{formatMoney(damageDamage Trend.change || 0)}</div>
+            <div style={styles.infoCardText}>{formatMoney(damageDamageTrend.change || 0)}</div>
             <div style={styles.infoCardSubtext}>Compared with the last tracked week.</div>
           </div>
         </div>
@@ -264,7 +264,7 @@ export function Dashboard(props: any) {
           </div>
           <div style={styles.infoCard}>
             <div style={styles.infoCardTitle}>Damage Trend</div>
-            <div style={styles.infoCardText}>{gpDamageSummary.damageDamage TrendLabel || "Damage stable"}</div>
+            <div style={styles.infoCardText}>{gpDamageSummary.damageDamageTrendLabel || "Damage stable"}</div>
           </div>
         </div>
       </div>

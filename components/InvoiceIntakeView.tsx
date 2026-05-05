@@ -641,7 +641,7 @@ export function InvoiceIntakeView(props: any) {
         }
       } else if (cogsType === "consumable_cogs") {
         summary.consumableRowsCount += 1;
-        summary.estimatedKitchen BitsTotal += lineValue;
+        summary.estimatedKitchenBitsTotal += lineValue;
       } else if (cogsType === "non_cogs") {
         summary.nonCogsRowsCount += 1;
         summary.estimatedNonCogsTotal += lineValue;
@@ -672,7 +672,7 @@ export function InvoiceIntakeView(props: any) {
       createNewCount: 0,
       unlinkedFoodRowsCount: 0,
       estimatedFoodCogsTotal: 0,
-      estimatedKitchen BitsTotal: 0,
+      estimatedKitchenBitsTotal: 0,
       estimatedNonCogsTotal: 0,
     }
   );
@@ -1712,7 +1712,7 @@ export function InvoiceIntakeView(props: any) {
     const hasInvoiceNumber = Boolean(String(invoiceIntakeMeta?.invoiceNumber || "").trim());
     const hasRows = invoiceFlowSummary.rowsDetected > 0;
     const hasReviewedRows = hasRows && invoiceReviewReadinessSummary.needsFixRowsCount === 0;
-    const hasFoodOrKitchen Bits = invoicePreflightSummary.foodRowsCount > 0 || invoicePreflightSummary.consumableRowsCount > 0 || invoicePreflightSummary.nonCogsRowsCount > 0;
+    const hasFoodOrKitchenBits = invoicePreflightSummary.foodRowsCount > 0 || invoicePreflightSummary.consumableRowsCount > 0 || invoicePreflightSummary.nonCogsRowsCount > 0;
     const backupReminder = invoiceLockSummary?.isLocked ? "Download backup after lock" : "Download backup before lock";
 
     const checklist = [
@@ -1743,7 +1743,7 @@ export function InvoiceIntakeView(props: any) {
       {
         key: "cogs",
         label: "COGS split checked",
-        done: hasFoodOrKitchen Bits,
+        done: hasFoodOrKitchenBits,
         helper: `${invoicePreflightSummary.foodRowsCount} food · ${invoicePreflightSummary.consumableRowsCount} consumable · ${invoicePreflightSummary.nonCogsRowsCount} non-COGS`,
       },
       {
