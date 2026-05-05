@@ -388,7 +388,7 @@ export function useInvoiceIntake(args: UseInvoiceIntakeArgs) {
       setSupplierInvoiceText(extractedText);
 
       const invoiceRowRecovery = chooseBestInvoiceRowsFromText(extractedText, supplierName);
-      const parsedRows = invoiceRowRecovery.rows;
+      const parsedRows = applyInvoiceAutopilotSelection(invoiceRowRecovery.rows);
       setSupplierInvoiceRows(parsedRows as any[]);
       const qualityWarning = [getInvoiceOcrQualityWarning(extractedText, parsedRows), invoiceRowRecovery.recoveryWarning]
         .filter(Boolean)
@@ -400,7 +400,8 @@ export function useInvoiceIntake(args: UseInvoiceIntakeArgs) {
         return;
       }
 
-      setSupplierInvoiceMessage(`Invoice text found. ${parsedRows.length} row${parsedRows.length === 1 ? "" : "s"} detected — review before locking into ingredients.`);
+      const autopilotSummary = buildInvoiceAutopilotSummary(parsedRows);
+      setSupplierInvoiceMessage(`Invoice text found. ${parsedRows.length} row${parsedRows.length === 1 ? "" : "s"} detected. Auto-selected ${autopilotSummary.selectedRows} safe row(s), left ${autopilotSummary.fixRows} for review.`);
     } catch (err) {
       console.error("GP Police OCR failed", err);
       setSupplierInvoiceRows([]);
@@ -415,13 +416,14 @@ export function useInvoiceIntake(args: UseInvoiceIntakeArgs) {
       return;
     }
     const invoiceRowRecovery = chooseBestInvoiceRowsFromText(supplierInvoiceText, selectedSupplier.name);
-    const rows = invoiceRowRecovery.rows;
+    const rows = applyInvoiceAutopilotSelection(invoiceRowRecovery.rows);
     setSupplierInvoiceRows(rows as any[]);
     const qualityWarning = [getInvoiceOcrQualityWarning(supplierInvoiceText, rows), invoiceRowRecovery.recoveryWarning]
       .filter(Boolean)
       .join(" ");
     setInvoiceQualityWarning(qualityWarning);
-    setSupplierInvoiceMessage(rows.length > 0 ? `Invoice text found. ${rows.length} row${rows.length === 1 ? "" : "s"} detected — review before locking into ingredients.${invoiceRowRecovery.recoveryUsed ? " Row recovery was used." : ""}` : qualityWarning || "No clear invoice rows detected — try a flatter photo or paste text.");
+    const autopilotSummary = buildInvoiceAutopilotSummary(rows);
+    setSupplierInvoiceMessage(rows.length > 0 ? `Invoice text found. ${rows.length} row${rows.length === 1 ? "" : "s"} detected. Auto-selected ${autopilotSummary.selectedRows} safe row(s), left ${autopilotSummary.fixRows} for review.${invoiceRowRecovery.recoveryUsed ? " Row recovery was used." : ""}` : qualityWarning || "No clear invoice rows detected — try a flatter photo or paste text.");
   };
 
   const refreshInvoiceRowIntelligence = () => {
@@ -433,9 +435,11 @@ export function useInvoiceIntake(args: UseInvoiceIntakeArgs) {
       return;
     }
 
-    const refreshedRows = applyInvoiceIngredientAutoMatching(
-      applyInvoiceCogsCategoryDetection(rows, supplierName),
-      supplierIngredients
+    const refreshedRows = applyInvoiceAutopilotSelection(
+      applyInvoiceIngredientAutoMatching(
+        applyInvoiceCogsCategoryDetection(rows, supplierName),
+        supplierIngredients
+      )
     );
 
     const beforeReadyCount = rows.filter((row: any) => {
@@ -452,11 +456,13 @@ export function useInvoiceIntake(args: UseInvoiceIntakeArgs) {
       return cogsType !== "unknown" && (cogsType !== "food_cogs" || linkedIngredientId || status === "create_new" || status === "ignore");
     }).length;
 
+    const autopilotSummary = buildInvoiceAutopilotSummary(refreshedRows);
+
     setSupplierInvoiceRows(refreshedRows as any[]);
     setSupplierInvoiceMessage(
       afterReadyCount > beforeReadyCount
-        ? `Re-checked invoice rows. ${afterReadyCount - beforeReadyCount} extra row(s) now look ready.`
-        : "Re-checked invoice rows with current supplier, COGS, and match memory."
+        ? `Re-checked invoice rows. ${afterReadyCount - beforeReadyCount} extra row(s) now look ready. Auto-selected ${autopilotSummary.selectedRows} safe row(s), left ${autopilotSummary.fixRows} for review.`
+        : `Re-checked invoice rows with current supplier, COGS, and match memory. Auto-selected ${autopilotSummary.selectedRows} safe row(s), left ${autopilotSummary.fixRows} for review.`
     );
   };
 
@@ -501,6 +507,10 @@ export function useInvoiceIntake(args: UseInvoiceIntakeArgs) {
 
         if (field === "linkedIngredientId") {
           const matchedIngredient = supplierIngredients.find((ingredient: any) => ingredient.id === value);
+          if (value && matchedIngredient) {
+            learnSupplierMatchFromReviewedRow(row, value);
+          }
+
           return {
             ...row,
             linkedIngredientId: value,
@@ -508,6 +518,9 @@ export function useInvoiceIntake(args: UseInvoiceIntakeArgs) {
             matchConfidence: value ? "manual" : "",
             invoiceMatchManualOverride: true,
             status: value ? "matched" : "needs_match",
+            selected: value ? true : false,
+            autopilotSafe: Boolean(value),
+            autopilotReason: value ? "Manually linked and learned for next invoice." : "Unlinked manually; review before locking.",
             confidence: value ? getInvoiceRowConfidence(row, matchedIngredient) : row.confidence || "medium",
           };
         }
@@ -531,6 +544,13 @@ export function useInvoiceIntake(args: UseInvoiceIntakeArgs) {
           if (normalizedCategory) {
             saveSupplierCogsMemory(nextRow, supplierNameForMemory, normalizedCategory);
           }
+
+          const safeAfterCategoryReview = getInvoiceRowIsSafeForAutopilot(nextRow);
+          nextRow.autopilotSafe = safeAfterCategoryReview;
+          nextRow.autopilotReason = safeAfterCategoryReview
+            ? "Category reviewed and row is safe enough for auto-selection."
+            : "Category reviewed, but row still needs a match, price, or name before locking.";
+          nextRow.selected = safeAfterCategoryReview;
         }
 
         if (["name", "qty", "unitPrice", "lineTotal", "linkedIngredientId"].includes(field)) {
@@ -755,6 +775,98 @@ export function useInvoiceIntake(args: UseInvoiceIntakeArgs) {
     if (lineTotal > 0) return lineTotal;
     if (unitPrice > 0) return unitPrice * qty;
     return 0;
+  };
+
+
+
+  const getInvoiceRowIsSafeForAutopilot = (row: any) => {
+    const cogsType = getInvoiceRowCogsTypeForApp(row);
+    const status = String(row?.status || "").trim().toLowerCase();
+    const linkedIngredientId = String(row?.linkedIngredientId || "").trim();
+    const matchConfidence = String(row?.matchConfidence || row?.confidence || row?.cogsCategoryConfidence || "").trim().toLowerCase();
+    const lineTotal = getInvoiceRowLineTotal(row);
+
+    if (status === "ignore") return false;
+    if (!String(row?.name || row?.description || row?.rawLine || "").trim()) return false;
+    if (lineTotal <= 0) return false;
+    if (!cogsType || cogsType === "unknown") return false;
+
+    if (cogsType === "food_cogs") {
+      if (!linkedIngredientId && status !== "create_new") return false;
+      return ["high", "learned", "manual"].includes(matchConfidence) || Boolean(linkedIngredientId);
+    }
+
+    if (cogsType === "consumable_cogs" || cogsType === "non_cogs") {
+      return true;
+    }
+
+    return false;
+  };
+
+  const applyInvoiceAutopilotSelection = (rows: any[]) => {
+    return (Array.isArray(rows) ? rows : []).map((row: any) => {
+      const safeForAutopilot = getInvoiceRowIsSafeForAutopilot(row);
+      const status = String(row?.status || "").trim().toLowerCase();
+
+      return {
+        ...row,
+        selected: status === "ignore" ? false : safeForAutopilot,
+        autopilotSafe: safeForAutopilot,
+        autopilotReason: safeForAutopilot
+          ? "Auto-selected because category, price, and matching are safe enough."
+          : "Left unselected for review before locking.",
+      };
+    });
+  };
+
+  const buildInvoiceAutopilotSummary = (rows: any[]) => {
+    return (Array.isArray(rows) ? rows : []).reduce(
+      (summary: any, row: any) => {
+        const cogsType = getInvoiceRowCogsTypeForApp(row);
+        const linkedIngredientId = String(row?.linkedIngredientId || "").trim();
+        const status = String(row?.status || "").trim().toLowerCase();
+        const safeForAutopilot = Boolean(row?.autopilotSafe || getInvoiceRowIsSafeForAutopilot(row));
+
+        summary.totalRows += 1;
+        if (safeForAutopilot) summary.safeRows += 1;
+        if (!safeForAutopilot) summary.fixRows += 1;
+        if (cogsType === "unknown") summary.unknownRows += 1;
+        if (cogsType === "food_cogs" && !linkedIngredientId && status !== "create_new" && status !== "ignore") summary.unmatchedFoodRows += 1;
+        if (row?.selected) summary.selectedRows += 1;
+        return summary;
+      },
+      { totalRows: 0, safeRows: 0, fixRows: 0, unknownRows: 0, unmatchedFoodRows: 0, selectedRows: 0 }
+    );
+  };
+
+  const learnSupplierMatchFromReviewedRow = (row: any, ingredientId: string) => {
+    const selectedIngredientId = String(ingredientId || "").trim();
+    if (!selectedIngredientId) return false;
+
+    const matchedIngredient = supplierIngredients.find((ingredient: any) => String(ingredient?.id || "") === selectedIngredientId);
+    if (!matchedIngredient) return false;
+
+    const supplierName = String(row?.supplierNameForLearning || row?.supplierName || selectedSupplier?.name || invoiceSpendForm.supplierName || "Unknown Supplier").trim() || "Unknown Supplier";
+    const key = buildSupplierMatchMemoryKey(row, supplierName);
+    if (!key) return false;
+
+    const learnedFrom = String(row?.cleanedInvoiceName || row?.name || row?.description || row?.rawLine || "").trim();
+
+    const memoryRecord = {
+      linkedIngredientId: selectedIngredientId,
+      ingredientName: String(matchedIngredient?.name || ""),
+      supplierName,
+      learnedFrom,
+      learnedAt: new Date().toISOString(),
+      source: "auto_review_link",
+    };
+
+    setSupplierMatchMemory((previous: Record<string, any>) => ({
+      ...(previous && typeof previous === "object" && !Array.isArray(previous) ? previous : {}),
+      [key]: memoryRecord,
+    }));
+
+    return true;
   };
 
   const buildInvoiceIngredientPricingPatch = (row: any) => {
@@ -1447,6 +1559,7 @@ Continue locking this invoice?`);
     handleSaveInvoiceSpend,
     deleteInvoiceSpendRecord,
     invoiceLockSummary,
+    invoiceAutopilotSummary: buildInvoiceAutopilotSummary(supplierInvoiceRows),
     handleLockInvoiceIntoStock,
     handleCreateIngredientFromInvoiceRow,
     setAllSupplierInvoiceRowsSelected,
