@@ -113,12 +113,18 @@ export function InvoicePreflightPanel(props: any) {
     getInvoiceDebugCleanName,
     handleLearnSupplierMatchFromRow,
     handleUpdateIngredientPriceFromInvoiceRow,
+    invoiceReviewActionPlan,
   } = props;
 
   return (
     <>
       {Array.isArray(supplierInvoiceRows) && supplierInvoiceRows.length > 0 ? (
         <div style={styles.infoCard}>
+          <div style={{ ...styles.infoCard, marginBottom: 12, border: invoiceCanLockSafely ? "1px solid rgba(34, 197, 94, 0.45)" : "1px solid rgba(245, 158, 11, 0.42)", background: invoiceCanLockSafely ? "rgba(34, 197, 94, 0.10)" : "rgba(245, 158, 11, 0.08)" }}>
+            <div style={styles.infoCardTitle}>{invoiceCanLockSafely ? "✅ Autopilot says clean" : "⚠️ Autopilot says keep fixing"}</div>
+            <div style={styles.infoCardSubtext}>{invoiceReviewActionPlan?.helper || "Final safety gate before stock and GP are touched."}</div>
+            <div style={{ ...styles.infoCardText, marginTop: 8 }}>Ready {invoiceReviewActionPlan?.readyRows || 0} / {invoiceReviewActionPlan?.totalRows || 0} rows · Needs fix {invoiceReviewActionPlan?.needsFixRows || 0}</div>
+          </div>
           <div style={styles.infoCardText}>Invoice Lock Status: {invoiceLockSummary.isLocked ? "Locked Into Stock" : "Draft"}</div>
           <div style={styles.infoCardSubtext}>
             Selected: {invoiceLockSummary.selectedCount} · Matched: {invoiceLockSummary.matchedCount} · Create new: {invoiceLockSummary.createNewCount} · Ignored: {invoiceLockSummary.ignoredCount} · Needs attention: {invoiceLockSummary.needsAttentionCount} · Total: {formatCurrency(invoiceLockSummary.estimatedTotal)}

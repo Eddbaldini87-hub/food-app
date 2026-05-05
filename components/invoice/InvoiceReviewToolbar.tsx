@@ -115,6 +115,9 @@ export function InvoiceReviewToolbar(props: any) {
     getInvoiceDebugCleanName,
     handleLearnSupplierMatchFromRow,
     handleUpdateIngredientPriceFromInvoiceRow,
+    invoiceReviewActionPlan,
+    handleRefreshInvoiceIntelligence,
+    handleInvoiceReviewPrimaryAction,
   } = props;
 
   return (
@@ -129,6 +132,31 @@ export function InvoiceReviewToolbar(props: any) {
             <button type="button" style={styles.primaryButton} onClick={handleFixNextInvoiceProblem}>Fix Next Problem</button>
           </div>
       
+          <div style={{ ...styles.infoCard, marginTop: 10, border: "1px solid rgba(59, 130, 246, 0.38)", background: "rgba(59, 130, 246, 0.08)" }}>
+            <div style={styles.infoCardTitle}>Autopilot Command</div>
+            <div style={styles.infoCardSubtext}>{invoiceReviewActionPlan?.helper || "GP Police is sorting safe rows from risky rows."}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 140px), 1fr))", gap: 10, marginTop: 10 }}>
+              <div style={styles.infoCard}>
+                <div style={styles.infoCardTitle}>Ready</div>
+                <div style={{ ...styles.infoCardText, color: "#bbf7d0" }}>{invoiceReviewActionPlan?.readyRows || 0}</div>
+              </div>
+              <div style={styles.infoCard}>
+                <div style={styles.infoCardTitle}>Needs Fix</div>
+                <div style={{ ...styles.infoCardText, color: (invoiceReviewActionPlan?.needsFixRows || 0) > 0 ? "#fecaca" : "#bbf7d0" }}>{invoiceReviewActionPlan?.needsFixRows || 0}</div>
+              </div>
+              <div style={styles.infoCard}>
+                <div style={styles.infoCardTitle}>Progress</div>
+                <div style={styles.infoCardText}>{invoiceReviewActionPlan?.progressPercent || 0}%</div>
+              </div>
+            </div>
+            <div style={{ ...styles.buttonRow, marginTop: 10 }}>
+              <button type="button" style={styles.primaryButton} onClick={handleInvoiceReviewPrimaryAction}>
+                {(invoiceReviewActionPlan?.needsFixRows || 0) > 0 ? "Fix Next Problem" : "Review / Lock"}
+              </button>
+              <button type="button" style={styles.secondaryButton} onClick={handleRefreshInvoiceIntelligence}>Re-check Matching</button>
+            </div>
+          </div>
+
           <div style={{
             ...styles.infoCard,
             position: "sticky",

@@ -117,6 +117,11 @@ export function InvoiceUploadPanel(props: any) {
 
   return (
     <>
+      <div style={{ ...styles.infoCard, marginBottom: 12, border: "1px solid rgba(59, 130, 246, 0.34)", background: "rgba(59, 130, 246, 0.08)" }}>
+        <div style={styles.infoCardTitle}>1. Scan / Paste</div>
+        <div style={styles.infoCardSubtext}>Keep it quick: add invoice number/date, scan the photo or paste supplier text, then let GP Police build the fix queue.</div>
+      </div>
+
       <div style={styles.formGrid}>
         <div style={styles.formGroup}>
           <label style={styles.label}>Invoice Number</label>
