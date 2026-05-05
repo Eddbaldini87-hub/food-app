@@ -38,6 +38,7 @@ export function createPageRenderers(props: any) {
     totalRecipeCount,
     stock,
     gpDamageSummary,
+    gpImpactSummary,
     invoiceSpendForm,
     setInvoiceSpendForm,
     invoiceWeeklySummary,
@@ -130,6 +131,7 @@ export function createPageRenderers(props: any) {
       totalRecipeCount={totalRecipeCount}
       stockDamageReport={stock.stockDamageReport}
       gpDamageSummary={gpDamageSummary}
+      gpImpactSummary={gpImpactSummary}
     />
   );
 

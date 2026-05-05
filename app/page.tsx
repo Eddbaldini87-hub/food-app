@@ -9,6 +9,7 @@ import { useInvoiceIntake } from "../hooks/useInvoiceIntake";
 import { usePosSales } from "../hooks/usePosSales";
 import { useBackup } from "../hooks/useBackup";
 import { useStockOrdering } from "../hooks/useStockOrdering";
+import { useGpEngine } from "@/hooks/useGpEngine";
 import { useSupplierIngredients } from "../hooks/useSupplierIngredients";
 import { useRecipeController } from "../hooks/useRecipeController";
 import { useVenueController } from "../hooks/useVenueController";
@@ -690,6 +691,13 @@ export default function Page() {
     preprocessInvoiceImageForOCR,
   });
 
+  const gpImpactSummary = useGpEngine({
+    supplierIngredients,
+    computedRecipes,
+    lockedInvoiceHistory,
+    posSalesReport,
+  });
+
   const handleSidebarNavigation = (viewKey: string) => {
     const allowedViewKeys = [
       "dashboard",
@@ -1168,6 +1176,7 @@ export default function Page() {
     totalRecipeCount,
     stock,
     gpDamageSummary,
+    gpImpactSummary,
     invoiceSpendForm,
     setInvoiceSpendForm,
     invoiceWeeklySummary,

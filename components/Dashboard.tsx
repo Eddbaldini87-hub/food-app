@@ -9,6 +9,9 @@ export function Dashboard(props: any) {
   const invoiceRecords = Array.isArray(props.invoiceSpendRecords) ? props.invoiceSpendRecords : [];
   const stockDamageReport = Array.isArray(props.stockDamageReport) ? props.stockDamageReport : [];
   const gpDamageSummary = props.gpDamageSummary || {};
+  const gpImpactSummary = props.gpImpactSummary || {};
+  const gpBiggestLosers = Array.isArray(gpImpactSummary.biggestLosers) ? gpImpactSummary.biggestLosers : [];
+  const gpAlerts = Array.isArray(gpImpactSummary.alerts) ? gpImpactSummary.alerts : [];
   const recipesWithNoComponents = Array.isArray(props.recipesWithNoComponents) ? props.recipesWithNoComponents : [];
   const finalDishesWithNoSellPrice = Array.isArray(props.finalDishesWithNoSellPrice) ? props.finalDishesWithNoSellPrice : [];
   const posSales = Array.isArray(props.posSales) ? props.posSales : [];
@@ -54,6 +57,15 @@ export function Dashboard(props: any) {
   };
 
   const nextAction = (() => {
+    if (safeNumber(gpImpactSummary.totalWeeklyDamage) > 0) {
+      return {
+        label: "💀 Menu GP impact detected",
+        detail: `${gpImpactSummary.affectedRecipeCount || 0} recipe(s) are being hit by supplier price movement. Estimated weekly damage: ${formatMoney(gpImpactSummary.totalWeeklyDamage)}.`,
+        button: "Open Damage Report",
+        action: () => props.handleSidebarNavigation?.("menu"),
+      };
+    }
+
     if (damageRising) {
       return {
         label: "💀 GP damage is rising",
@@ -201,6 +213,64 @@ export function Dashboard(props: any) {
             <div style={styles.infoCardText}>{gpDamageSummary.damageTrendLabel || "Damage stable"}</div>
           </div>
         </div>
+      </div>
+
+
+      <div style={{ ...styles.card, border: "1px solid rgba(248, 113, 113, 0.32)", background: "rgba(127, 29, 29, 0.14)" }}>
+        <div style={styles.dashboardSectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>🍽️ Menu GP Impact Engine</h2>
+            <p style={styles.sectionSubtitle}>Maps supplier price movement onto final dishes so the Main Hideout can see what plates are getting hurt.</p>
+          </div>
+          <button type="button" style={styles.secondaryButton} onClick={() => props.handleSidebarNavigation?.("menu")}>Open Damage Report</button>
+        </div>
+
+        <div style={styles.infoGrid}>
+          <div style={styles.infoCard}>
+            <div style={styles.infoCardTitle}>Affected Dishes</div>
+            <div style={styles.infoCardText}>{safeNumber(gpImpactSummary.affectedRecipeCount)}</div>
+          </div>
+          <div style={styles.infoCard}>
+            <div style={styles.infoCardTitle}>Ingredient Risks</div>
+            <div style={styles.infoCardText}>{safeNumber(gpImpactSummary.affectedIngredientCount)}</div>
+          </div>
+          <div style={styles.infoCard}>
+            <div style={styles.infoCardTitle}>Estimated Weekly Damage</div>
+            <div style={styles.infoCardText}>{formatMoney(gpImpactSummary.totalWeeklyDamage)}</div>
+          </div>
+          <div style={styles.infoCard}>
+            <div style={styles.infoCardTitle}>Per-Serve Damage</div>
+            <div style={styles.infoCardText}>{formatMoney(gpImpactSummary.totalPerServeDamage)}</div>
+          </div>
+        </div>
+
+        {gpAlerts.length === 0 ? (
+          <div style={{ ...(styles.emptyState || styles.infoCardText), marginTop: 12 }}>Lock invoices against linked ingredients and GP Police will start calling out menu GP impact here.</div>
+        ) : (
+          <div style={{ ...styles.infoGrid, marginTop: 12 }}>
+            {gpAlerts.slice(0, 4).map((alert: any, index: number) => (
+              <div key={`${alert.title}-${index}`} style={styles.infoCard}>
+                <div style={styles.infoCardTitle}>{alert.title}</div>
+                <div style={styles.infoCardSubtext}>{alert.detail}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {gpBiggestLosers.length > 0 ? (
+          <div style={{ marginTop: 14 }}>
+            <div style={styles.infoCardTitle}>Biggest Dish Losers</div>
+            <div style={{ ...styles.infoGrid, marginTop: 10 }}>
+              {gpBiggestLosers.slice(0, 4).map((recipe: any) => (
+                <div key={recipe.recipeId || recipe.recipeName} style={styles.infoCard}>
+                  <div style={styles.infoCardTitle}>{recipe.recipeName}</div>
+                  <div style={styles.infoCardText}>+{formatMoney(recipe.estimatedCostIncreasePerServe)} / serve</div>
+                  <div style={styles.infoCardSubtext}>{recipe.ingredientName} +{Math.round(safeNumber(recipe.percentIncrease))}%{safeNumber(recipe.estimatedWeeklyDamage) > 0 ? ` · ${formatMoney(recipe.estimatedWeeklyDamage)} weekly` : ""}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div style={styles.card}>
