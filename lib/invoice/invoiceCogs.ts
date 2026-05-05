@@ -150,15 +150,27 @@ export function classifyInvoiceCogsCategory(row: any, supplierName: string) {
   const searchText = getInvoiceCategorySearchText(row, supplierName);
 
   const nonCogsTerms = [
-    "detergent", "sanitizer", "sanitiser", "chemical", "bleach", "cleaner", "cleaning", "degreaser", "rinse aid", "dishwash", "dishwasher", "mop", "broom", "cloth", "sponge", "soap", "hand wash", "toilet", "pest", "repair", "equipment", "uniform",
+    "pest", "repair", "equipment", "uniform", "knife hire", "rental", "service fee", "delivery fee", "freight", "credit", "rebate", "surcharge",
   ];
 
   const consumableTerms = [
-    "napkin", "serviette", "glove", "gloves", "foil", "cling", "cling wrap", "paper towel", "towel", "detergent", "chemical", "sanitiser", "sanitizer", "cleaner", "scourer", "sponge", "garbage bag", "bin liner", "takeaway", "container", "lid", "cup", "straw", "docket", "docket roll", "blue roll", "chux", "wipe", "wipes", "baking paper",
+    "napkin", "napkins", "serviette", "serviettes", "glove", "gloves", "nitrile", "vinyl", "latex",
+    "foil", "alfoil", "cling", "cling wrap", "wrap", "paper towel", "towel", "detergent", "chemical",
+    "sanitiser", "sanitizer", "bleach", "cleaner", "cleaning", "degreaser", "rinse aid", "dishwash",
+    "dishwasher", "scourer", "sponge", "cloth", "chux", "wipe", "wipes", "mop", "broom",
+    "garbage bag", "bin liner", "takeaway", "take away", "container", "containers", "lid", "lids",
+    "cup", "cups", "straw", "straws", "docket", "docket roll", "blue roll", "baking paper",
+    "greaseproof", "label", "labels", "bag", "bags", "cutlery", "fork", "knife", "spoon", "skewer",
   ];
 
   const foodTerms = [
-    "beef", "chicken", "pork", "lamb", "fish", "prawn", "squid", "cheese", "milk", "cream", "butter", "yoghurt", "egg", "flour", "sugar", "rice", "pasta", "oil", "vinegar", "tomato", "lettuce", "carrot", "onion", "potato", "herb", "spice", "sauce", "stock", "bread", "bun", "roll", "bacon", "ham", "salami",
+    "beef", "chicken", "pork", "lamb", "fish", "prawn", "prawns", "squid", "seafood", "barramundi", "salmon", "tuna",
+    "cheese", "milk", "cream", "butter", "yoghurt", "yogurt", "egg", "eggs", "flour", "sugar", "rice", "pasta",
+    "oil", "vinegar", "tomato", "lettuce", "carrot", "onion", "potato", "potatoes", "herb", "spice",
+    "sauce", "stock", "bread", "bun", "buns", "roll", "bacon", "ham", "salami", "prosciutto", "pepperoni",
+    "mushroom", "avocado", "cucumber", "capsicum", "garlic", "ginger", "lemon", "lime", "orange", "apple",
+    "banana", "berry", "berries", "peas", "beans", "corn", "spinach", "rocket", "kale", "broccoli", "cauliflower",
+    "frozen", "dry", "dairy", "yeast", "salt", "pepper", "crumb", "crumbs", "mayonnaise", "mustard", "pickle",
   ];
 
   const nonCogsMatch = hasInvoiceCategoryTerm(searchText, nonCogsTerms);
@@ -203,7 +215,7 @@ export function classifyInvoiceCogsCategory(row: any, supplierName: string) {
 
   if (consumableMatch && foodMatch) {
     const strongConsumableMatch = hasInvoiceCategoryTerm(searchText, [
-      "paper towel", "docket roll", "blue roll", "cling wrap", "garbage bag", "bin liner", "baking paper", "takeaway", "container",
+      "paper towel", "docket roll", "blue roll", "cling wrap", "garbage bag", "bin liner", "baking paper", "takeaway", "container", "chemical", "detergent", "sanitiser", "sanitizer", "glove", "gloves",
     ]);
 
     if (strongConsumableMatch) {

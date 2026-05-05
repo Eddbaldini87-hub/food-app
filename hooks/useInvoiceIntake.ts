@@ -8,6 +8,7 @@ import {
   normalizeInvoiceCogsTypeForApp,
   saveSupplierCogsMemory,
 } from "../lib/invoice/invoiceCogs";
+import { applyInvoiceIngredientIntelligence } from "../lib/invoice/invoiceMatching";
 import {
   safeNumber,
   normalizeLooseText,
@@ -268,59 +269,12 @@ export function useInvoiceIntake(args: UseInvoiceIntakeArgs) {
   };
 
   const applyInvoiceIngredientAutoMatching = (rows: any[], availableSupplierIngredients: any[]) => {
-    return rows.map((row: any) => {
-      const supplierNameForLearning = String(
-        row?.supplierNameForLearning ||
-        row?.supplierName ||
-        selectedSupplier?.name ||
-        invoiceSpendForm.supplierName ||
-        "Unknown Supplier"
-      ).trim() || "Unknown Supplier";
-      const supplierMatchKey = buildSupplierMatchMemoryKey(row, supplierNameForLearning);
-      const suggestedLearningLabel = normalizeSupplierMatchText(
-        [row?.cleanedInvoiceName, row?.name, row?.description, row?.itemName, row?.productName, row?.rawLine]
-          .filter(Boolean)
-          .join(" ")
-      );
-      const rowWithLearningMeta = {
-        ...row,
-        supplierMatchKey,
-        supplierNameForLearning,
-        suggestedLearningLabel,
-      };
-
-      if (row?.linkedIngredientId || row?.invoiceMatchManualOverride) {
-        return rowWithLearningMeta;
-      }
-
-      const memoryEntry = getSupplierMatchMemoryEntry(rowWithLearningMeta, supplierNameForLearning);
-      const memoryIngredientId = String(memoryEntry?.linkedIngredientId || memoryEntry?.ingredientId || "").trim();
-      const learnedIngredient = memoryIngredientId
-        ? (availableSupplierIngredients || []).find((ingredient: any) => String(ingredient?.id || "") === memoryIngredientId)
-        : null;
-
-      if (learnedIngredient?.id) {
-        return {
-          ...rowWithLearningMeta,
-          linkedIngredientId: learnedIngredient.id,
-          matchedIngredientName: learnedIngredient.name || memoryEntry?.ingredientName || "",
-          matchConfidence: "learned",
-          matchDebugReason: "Learned supplier match memory",
-          status: "matched",
-          confidence: getInvoiceRowConfidence(rowWithLearningMeta, learnedIngredient),
-        };
-      }
-
-      const matchResult = autoMatchInvoiceRowToIngredient(rowWithLearningMeta, availableSupplierIngredients);
-
-      if (!matchResult) {
-        return rowWithLearningMeta;
-      }
-
-      return {
-        ...rowWithLearningMeta,
-        ...matchResult,
-      };
+    return applyInvoiceIngredientIntelligence({
+      rows,
+      availableSupplierIngredients,
+      supplierName: String(selectedSupplier?.name || invoiceSpendForm.supplierName || "Unknown Supplier"),
+      supplierMatchMemory,
+      getInvoiceRowConfidence,
     });
   };
 
