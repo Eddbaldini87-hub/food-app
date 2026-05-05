@@ -10,20 +10,20 @@ export function InvoicePreflightPanel(props: any) {
     supplierInvoiceText,
     setSupplierInvoiceText,
     parseInvoiceForSelectedSupplier,
-    handleSaveInvoiceDraft,
-    handleLoadInvoiceDraft,
-    handleDeleteInvoiceDraft,
+    handleSaveInvoiceStill draft,
+    handleLoadInvoiceStill draft,
+    handleDeleteInvoiceStill draft,
     setSupplierInvoiceRows,
     setSupplierInvoiceMessage,
     setInvoiceQualityWarning,
     setInvoiceFixingRowId,
-    setInvoiceDraftMessage,
+    setInvoiceStill draftMessage,
     setSupplierInvoicePhotoName,
     setSupplierInvoicePhotoPreviewUrl,
     supplierInvoiceMessage,
     invoiceQualityWarning,
-    invoiceDraftMessage,
-    invoiceDraft,
+    invoiceStill draftMessage,
+    invoiceStill draft,
     invoiceLockSuccessReport,
     lockedInvoiceHistory,
     formatCurrency,
@@ -121,13 +121,13 @@ export function InvoicePreflightPanel(props: any) {
       {Array.isArray(supplierInvoiceRows) && supplierInvoiceRows.length > 0 ? (
         <div style={styles.infoCard}>
           <div style={{ ...styles.infoCard, marginBottom: 12, border: invoiceCanLockSafely ? "1px solid rgba(34, 197, 94, 0.45)" : "1px solid rgba(245, 158, 11, 0.42)", background: invoiceCanLockSafely ? "rgba(34, 197, 94, 0.10)" : "rgba(245, 158, 11, 0.08)" }}>
-            <div style={styles.infoCardTitle}>{invoiceCanLockSafely ? "✅ Autopilot says clean" : "⚠️ Autopilot says keep fixing"}</div>
-            <div style={styles.infoCardSubtext}>{invoiceReviewActionPlan?.helper || "Final safety gate before stock and GP are touched."}</div>
-            <div style={{ ...styles.infoCardText, marginTop: 8 }}>Ready {invoiceReviewActionPlan?.readyRows || 0} / {invoiceReviewActionPlan?.totalRows || 0} rows · Needs fix {invoiceReviewActionPlan?.needsFixRows || 0}</div>
+            <div style={styles.infoCardTitle}>{invoiceCanLockSafely ? "✅ Clean Enough To Lock" : "⚠️ Still Dirty — Keep Fixing"}</div>
+            <div style={styles.infoCardSubtext}>{invoiceReviewActionPlan?.helper || "Last gate before this hits stock and GP."}</div>
+            <div style={{ ...styles.infoCardText, marginTop: 8 }}>Safe {invoiceReviewActionPlan?.readyRows || 0} / {invoiceReviewActionPlan?.totalRows || 0} rows · Needs fixing {invoiceReviewActionPlan?.needsFixRows || 0}</div>
           </div>
-          <div style={styles.infoCardText}>Invoice Lock Status: {invoiceLockSummary.isLocked ? "Locked Into Stock" : "Draft"}</div>
+          <div style={styles.infoCardText}>Lock status: {invoiceLockSummary.isLocked ? "Locked into stock" : "Still draft"}</div>
           <div style={styles.infoCardSubtext}>
-            Selected: {invoiceLockSummary.selectedCount} · Matched: {invoiceLockSummary.matchedCount} · Create new: {invoiceLockSummary.createNewCount} · Ignored: {invoiceLockSummary.ignoredCount} · Needs attention: {invoiceLockSummary.needsAttentionCount} · Total: {formatCurrency(invoiceLockSummary.estimatedTotal)}
+            Selected: {invoiceLockSummary.selectedCount} · Matched: {invoiceLockSummary.matchedCount} · Create: {invoiceLockSummary.createNewCount} · Binned: {invoiceLockSummary.ignoredCount} · Still ugly: {invoiceLockSummary.needsAttentionCount} · Total: {formatCurrency(invoiceLockSummary.estimatedTotal)}
           </div>
           <div style={{ ...styles.formGrid, marginTop: 12 }}>
             <div style={styles.infoCard}>
@@ -135,17 +135,17 @@ export function InvoicePreflightPanel(props: any) {
               <div style={styles.infoCardText}>{formatCurrency(invoiceCogsCategoryTotals.food)}</div>
             </div>
             <div style={styles.infoCard}>
-              <div style={styles.infoCardTitle}>Kitchen Consumables</div>
+              <div style={styles.infoCardTitle}>Kitchen Bits</div>
               <div style={styles.infoCardText}>{formatCurrency(invoiceCogsCategoryTotals.consumable)}</div>
             </div>
             <div style={styles.infoCard}>
-              <div style={styles.infoCardTitle}>Unknown / Needs Review</div>
+              <div style={styles.infoCardTitle}>Mystery Money</div>
               <div style={styles.infoCardText}>{formatCurrency(invoiceCogsCategoryTotals.unknown)}</div>
             </div>
           </div>
           <div style={{ ...styles.infoCard, marginTop: 12 }}>
-            <div style={styles.infoCardTitle}>Final Lock Check</div>
-            <div style={styles.infoCardSubtext}>Last check before the numbers hit stock and GP.</div>
+            <div style={styles.infoCardTitle}>Last Chance Check</div>
+            <div style={styles.infoCardSubtext}>If this is wrong, GP gets hit. Check it now.</div>
             <div style={{ ...styles.formGrid, marginTop: 12 }}>
               <div style={styles.infoCard}>
                 <div style={styles.infoCardTitle}>Selected Rows</div>
@@ -156,11 +156,11 @@ export function InvoicePreflightPanel(props: any) {
                 <div style={styles.infoCardText}>{invoicePreflightSummary.foodRowsCount}</div>
               </div>
               <div style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>Consumable Rows</div>
+                <div style={styles.infoCardTitle}>Kitchen Bits</div>
                 <div style={styles.infoCardText}>{invoicePreflightSummary.consumableRowsCount}</div>
               </div>
               <div style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>Unknown Rows</div>
+                <div style={styles.infoCardTitle}>Mystery Rows</div>
                 <div style={styles.infoCardText}>{invoicePreflightSummary.unknownRowsCount}</div>
               </div>
               <div style={styles.infoCard}>
@@ -176,43 +176,43 @@ export function InvoicePreflightPanel(props: any) {
                 <div style={styles.infoCardText}>{invoicePreflightSummary.createNewCount}</div>
               </div>
               <div style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>Food COGS Total</div>
+                <div style={styles.infoCardTitle}>Food Damage Total</div>
                 <div style={styles.infoCardText}>{formatCurrency(invoicePreflightSummary.estimatedFoodCogsTotal)}</div>
               </div>
               <div style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>Consumables Total</div>
+                <div style={styles.infoCardTitle}>Kitchen Bits Total</div>
                 <div style={styles.infoCardText}>{formatCurrency(invoicePreflightSummary.estimatedConsumablesTotal)}</div>
               </div>
             </div>
             {invoicePreflightSummary.unknownRowsCount > 0 ? (
               <div style={{ ...styles.infoCardText, color: "#fca5a5", marginTop: 10 }}>
-                ⚠️ We don’t know what some rows are — fix them before locking.
+                ⚠️ Mystery rows still there. Don’t lock garbage.
               </div>
             ) : null}
             {invoicePreflightSummary.unlinkedFoodRowsCount > 0 ? (
               <div style={{ ...styles.infoCardText, color: "#fca5a5", marginTop: 6 }}>
-                ⚠️ Food rows are not linked — link them or mark Create New.
+                ⚠️ Food with no match. Link it or create it.
               </div>
             ) : null}
             {!invoiceCanLockSafely ? (
               <div style={{ ...styles.infoCard, marginTop: 12, border: "1px solid rgba(248, 113, 113, 0.45)", background: "rgba(127, 29, 29, 0.14)" }}>
                 <div style={{ ...styles.infoCardTitle, color: "#fecaca" }}>🚧 Not Clean Yet</div>
-                <div style={styles.infoCardSubtext}>Fix the blockers before this invoice can touch stock.</div>
+                <div style={styles.infoCardSubtext}>Fix the ugly bits before this hits stock.</div>
                 <div style={{ ...styles.infoCardSubtext, marginTop: 8 }}>
                   Unknown: {invoiceLockBlockingSummary.unknownRowsCount} · Unlinked food: {invoiceLockBlockingSummary.unlinkedFoodRowsCount} · Missing names: {invoiceLockBlockingSummary.missingNameRowsCount} · Missing totals: {invoiceLockBlockingSummary.missingValueRowsCount}
                 </div>
               </div>
             ) : (
               <div style={{ ...styles.infoCard, marginTop: 12, border: "1px solid rgba(34, 197, 94, 0.45)", background: "rgba(34, 197, 94, 0.10)" }}>
-                <div style={{ ...styles.infoCardTitle, color: "#bbf7d0" }}>✅ Clean To Lock</div>
-                <div style={styles.infoCardSubtext}>Rows are named, valued, categorised, and ready for stock.</div>
+                <div style={{ ...styles.infoCardTitle, color: "#bbf7d0" }}>✅ Lock It Down</div>
+                <div style={styles.infoCardSubtext}>Rows are named, valued, sorted, and ready.</div>
               </div>
             )}
           </div>
       
           <div style={styles.buttonRow}>
             <button type="button" style={invoiceCanLockSafely ? styles.primaryButton : styles.secondaryButton} onClick={handleSafeLockInvoiceClick} disabled={invoiceLockSummary.isLocked}>
-              {invoiceLockSummary.isLocked ? "Invoice Already Locked" : invoiceFlowSummary.lockLabel}
+              {invoiceLockSummary.isLocked ? "Already Locked" : invoiceFlowSummary.lockLabel}
             </button>
             {!invoiceCanLockSafely ? (
               <button type="button" style={styles.secondaryButton} onClick={showOnlyInvoiceRowsNeedingFix}>Show Fix Only</button>

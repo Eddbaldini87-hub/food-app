@@ -86,7 +86,7 @@ export function InvoiceIntakeView(props: any) {
   }, []);
 
 
-  const selectedSupplierName = String(selectedSupplier?.name || invoiceIntakeMeta?.supplierName || "Unknown supplier").trim() || "Unknown supplier";
+  const selectedSupplierName = String(selectedSupplier?.name || invoiceIntakeMeta?.supplierName || "Mystery supplier").trim() || "Mystery supplier";
 
   const getInvoiceAccuracyMoneyCount = (value: string) => {
     const matches = String(value || "").match(/(?:\$\s*)?\d{1,6}(?:[.,]\d{2})\b/g);
@@ -214,14 +214,14 @@ export function InvoiceIntakeView(props: any) {
           .filter(Boolean)
       )
     );
-    const finalParserSource = currentRowSources.length ? currentRowSources.join(", ") : String(chosenCandidate?.candidateName || "Not enough data yet");
+    const finalParserSource = currentRowSources.length ? currentRowSources.join(", ") : String(chosenCandidate?.candidateName || "Not enough evidence yet");
 
     const chosenReasons: string[] = [];
     if (chosenCandidate) {
       chosenReasons.push(`${chosenCandidate.rowCount} rows found`);
       chosenReasons.push(`${chosenCandidate.rowsWithPrice} rows with prices`);
       chosenReasons.push(`${chosenCandidate.rowsWithCategory} categorised rows`);
-      if (chosenCandidate.unknownRows > 0) chosenReasons.push(`${chosenCandidate.unknownRows} unknown rows still need eyes`);
+      if (chosenCandidate.unknownRows > 0) chosenReasons.push(`${chosenCandidate.unknownRows} unknown rows still need eyeballs`);
       if (chosenCandidate.estimatedTotal > 0) chosenReasons.push(`${formatCurrency(chosenCandidate.estimatedTotal)} estimated total`);
     }
 
@@ -282,7 +282,7 @@ export function InvoiceIntakeView(props: any) {
     }));
 
     const debugPack = [
-      "GP POLICE INVOICE DEBUG PACK",
+      "GP POLICE INVOICE NERD PACK",
       `Supplier: ${selectedSupplierName}`,
       `Invoice number: ${String(invoiceIntakeMeta?.invoiceNumber || "")}`,
       `Invoice date: ${String(invoiceIntakeMeta?.invoiceDate || "")}`,
@@ -312,15 +312,15 @@ export function InvoiceIntakeView(props: any) {
 
     try {
       await navigator.clipboard.writeText(debugPack);
-      setSupplierInvoiceMessage("Invoice debug pack copied. Paste it into the next build/debug chat when an invoice fails.");
+      setSupplierInvoiceMessage("Nerd pack copied. Paste it when an invoice makes a mess.");
     } catch (error) {
-      setSupplierInvoiceMessage("Could not copy debug pack automatically. Open the Accuracy Lab and copy the visible text manually.");
+      setSupplierInvoiceMessage("Could not copy the nerd pack. Open the lab and copy it manually.");
     }
   };
 
   const getInvoiceAccuracyTextPreview = (value: string) => {
     const text = String(value || "").trim();
-    return text || "No text available yet.";
+    return text || "No invoice text yet.";
   };
 
   const getInvoiceRowMergedWarning = (row: any) => {
@@ -345,7 +345,7 @@ export function InvoiceIntakeView(props: any) {
     if (cogsType === "consumable_cogs") return "Consumable COGS";
     if (cogsType === "non_cogs") return "Non-COGS";
 
-    return "Unknown / Needs Review";
+    return "Mystery / Needs Review";
   };
 
   const getInvoiceCogsCategoryBadgeStyle = (row: any): any => {
@@ -407,11 +407,11 @@ export function InvoiceIntakeView(props: any) {
       return `${confidence ? `${confidence.toUpperCase()} confidence · ` : ""}${reason}`;
     }
 
-    if (cogsType === "food_cogs") return "This line is being treated as kitchen food cost.";
-    if (cogsType === "consumable_cogs") return "This line is being treated as kitchen consumable cost.";
-    if (cogsType === "non_cogs") return "This line is flagged as non-COGS and will not touch food GP.";
+    if (cogsType === "food_cogs") return "Food cost. This hits GP.";
+    if (cogsType === "consumable_cogs") return "Kitchen bits. Kept out of food GP.";
+    if (cogsType === "non_cogs") return "Not GP. This stays out of food cost.";
 
-    return "GP Police could not confidently decide the COGS file yet. Review before locking.";
+    return "GP Police is not sure where this belongs. Fix it before locking.";
   };
 
 
@@ -437,7 +437,7 @@ export function InvoiceIntakeView(props: any) {
     const cogsType = getInvoiceRowCogsType(row);
 
     // Stage 5.17 safety rule:
-    // Price-rise warnings are FOOD COGS only. Consumables, non-COGS, and unknown
+    // Price-rise warnings are FOOD COST only. Kitchen Bits, non-COGS, and unknown
     // rows must never trigger food GP ingredient price intelligence.
     if (cogsType !== "food_cogs") {
       return flags;
@@ -468,7 +468,7 @@ export function InvoiceIntakeView(props: any) {
         : 0;
 
     if (!knownPurchasePrice || !invoicePrice || !Number.isFinite(knownPurchasePrice) || !Number.isFinite(invoicePrice)) {
-      flags.push("⚠️ No price history to compare yet");
+      flags.push("⚠️ No old price to compare yet");
       return flags;
     }
 
@@ -490,7 +490,7 @@ export function InvoiceIntakeView(props: any) {
 
     // Stage 5.17 safety rule:
     // Only matched food COGS rows can suggest ingredient price updates.
-    // Consumables, non-COGS, and unknown rows are deliberately blocked.
+    // Kitchen Bits, non-COGS, and unknown rows are deliberately blocked.
     if (cogsType !== "food_cogs") {
       return null;
     }
@@ -536,7 +536,7 @@ export function InvoiceIntakeView(props: any) {
     const cogsType = getInvoiceRowCogsType(row);
 
     if (cogsType !== "food_cogs") {
-      setSupplierInvoiceMessage("Only food COGS rows can update ingredient prices. Consumables and non-COGS stay out of food GP.");
+      setSupplierInvoiceMessage("Only food cost rows can update ingredient prices. Kitchen bits stay out of GP.");
       return;
     }
 
@@ -544,17 +544,17 @@ export function InvoiceIntakeView(props: any) {
     const linkedIngredientId = String(row?.linkedIngredientId || "").trim();
 
     if (!suggestion || !linkedIngredientId) {
-      setSupplierInvoiceMessage("No linked ingredient price update available for this row.");
+      setSupplierInvoiceMessage("No linked ingredient price update for this row.");
       return;
     }
 
     if (typeof setSupplierIngredients !== "function") {
-      setSupplierInvoiceMessage("Ingredient price update is not connected on this screen yet.");
+      setSupplierInvoiceMessage("Price update is not connected here yet.");
       return;
     }
 
     const confirmed = window.confirm(
-      `Update this FOOD ingredient price from ${formatCurrency(suggestion.currentIngredientPrice)} → ${formatCurrency(suggestion.invoicePrice)}? This only changes the linked ingredient after your approval.`
+      `Accept this new FOOD cost from ${formatCurrency(suggestion.currentIngredientPrice)} → ${formatCurrency(suggestion.invoicePrice)}? Only the linked ingredient changes after you approve.`
     );
 
     if (!confirmed) return;
@@ -571,7 +571,7 @@ export function InvoiceIntakeView(props: any) {
       )
     );
 
-    setSupplierInvoiceMessage("Ingredient price updated after manual approval. Recipes were not changed directly.");
+    setSupplierInvoiceMessage("Ingredient cost updated. Recipes now have fresh damage evidence.");
   };
 
 
@@ -641,7 +641,7 @@ export function InvoiceIntakeView(props: any) {
         }
       } else if (cogsType === "consumable_cogs") {
         summary.consumableRowsCount += 1;
-        summary.estimatedConsumablesTotal += lineValue;
+        summary.estimatedKitchen BitsTotal += lineValue;
       } else if (cogsType === "non_cogs") {
         summary.nonCogsRowsCount += 1;
         summary.estimatedNonCogsTotal += lineValue;
@@ -672,7 +672,7 @@ export function InvoiceIntakeView(props: any) {
       createNewCount: 0,
       unlinkedFoodRowsCount: 0,
       estimatedFoodCogsTotal: 0,
-      estimatedConsumablesTotal: 0,
+      estimatedKitchen BitsTotal: 0,
       estimatedNonCogsTotal: 0,
     }
   );
@@ -746,7 +746,7 @@ export function InvoiceIntakeView(props: any) {
       return {
         level: "low",
         label: "Fix",
-        helper: cogsType === "unknown" ? "Category needs review" : "Food row not linked",
+        helper: cogsType === "unknown" ? "Mystery category" : "Food with no match",
       };
     }
 
@@ -754,7 +754,7 @@ export function InvoiceIntakeView(props: any) {
       return {
         level: categoryConfidence === "low" ? "medium" : "high",
         label: cogsType === "consumable_cogs" ? "Separated" : "Excluded",
-        helper: cogsType === "consumable_cogs" ? "Consumable will stay out of food COGS" : "Non-COGS will not touch food GP",
+        helper: cogsType === "consumable_cogs" ? "Kitchen bits stay out of food GP" : "Not GP. Won’t touch food cost",
       };
     }
 
@@ -762,7 +762,7 @@ export function InvoiceIntakeView(props: any) {
       return {
         level: "high",
         label: "Safe",
-        helper: "Category and ingredient match look solid",
+        helper: "Looks safe",
       };
     }
 
@@ -770,14 +770,14 @@ export function InvoiceIntakeView(props: any) {
       return {
         level: "medium",
         label: "Check",
-        helper: "Review this before locking",
+        helper: "Check before locking",
       };
     }
 
     return {
       level: "medium",
       label: "Check",
-      helper: "Matched, but confidence is not fully proven yet",
+      helper: "Matched, but still worth a look",
     };
   };
 
@@ -878,30 +878,30 @@ export function InvoiceIntakeView(props: any) {
     const hasMatch = getInvoiceRowHasMatchedIngredient(row);
 
     if (getInvoiceRowHasDuplicateWarning(row)) {
-      return { key: "duplicates", label: "DUPLICATE WARNING", tone: "danger" };
+      return { key: "duplicates", label: "DOUBLE-DIP WARNING", tone: "danger" };
     }
 
     if (getInvoiceRowHasPriceWarning(row)) {
-      return { key: "price_warnings", label: "PRICE WARNING", tone: "danger" };
+      return { key: "price_warnings", label: "PRICE SMACK", tone: "danger" };
     }
 
     if (cogsType === "unknown" || status === "unknown" || status === "needs_fix" || (cogsType === "food_cogs" && !hasMatch && status !== "create_new" && status !== "ignore")) {
-      return { key: "needs_fix", label: "NEEDS FIX", tone: "warning" };
+      return { key: "needs_fix", label: "FIX THIS", tone: "warning" };
     }
 
     if (cogsType === "consumable_cogs") {
-      return { key: "consumable_cogs", label: "CONSUMABLE", tone: "info" };
+      return { key: "consumable_cogs", label: "KITCHEN BITS", tone: "info" };
     }
 
     if (cogsType === "food_cogs") {
-      return { key: "food_cogs", label: "FOOD COGS", tone: "success" };
+      return { key: "food_cogs", label: "FOOD COST", tone: "success" };
     }
 
     if (cogsType === "non_cogs") {
-      return { key: "non_cogs", label: "NON-COGS", tone: "muted" };
+      return { key: "non_cogs", label: "NOT GP", tone: "muted" };
     }
 
-    return { key: "needs_fix", label: "NEEDS FIX", tone: "warning" };
+    return { key: "needs_fix", label: "FIX THIS", tone: "warning" };
   };
 
   const getInvoiceOutcomeBadgeStyle = (row: any): any => {
@@ -982,7 +982,7 @@ export function InvoiceIntakeView(props: any) {
     const cogsType = getInvoiceRowCogsType(row);
     const matchedName = String(row?.matchedIngredientName || "").trim();
 
-    if (cogsType !== "food_cogs") return "Match not required";
+    if (cogsType !== "food_cogs") return "No match needed";
     if (matchedName) return `Matched: ${matchedName}`;
     return "No match found";
   };
@@ -1044,7 +1044,7 @@ export function InvoiceIntakeView(props: any) {
     const change = thisWeekTotal - lastWeekTotal;
     const percentChange = lastWeekTotal > 0 ? (change / lastWeekTotal) * 100 : thisWeekTotal > 0 ? 100 : 0;
 
-    let label = "Damage stable";
+    let label = "Damage steady";
     let tone = "stable";
 
     if (change > 1) {
@@ -1109,14 +1109,14 @@ export function InvoiceIntakeView(props: any) {
     const percentChange = lastWeekSpend > 0 ? (weeklyChange / lastWeekSpend) * 100 : thisWeekSpend > 0 ? 100 : 0;
 
     let tone = "good";
-    let label = "✅ Spend holding steady";
+    let label = "✅ Spend behaving";
 
     if (lastWeekSpend <= 0 && thisWeekSpend > 0) {
       tone = "watch";
-      label = "⚠️ First week tracked — build history before judging it";
+      label = "⚠️ First week tracked — need more evidence before judging it";
     } else if (percentChange > 15) {
       tone = "danger";
-      label = `🚨 Weekly spend up ${Math.round(percentChange)}%`;
+      label = `🚨 Weekly spend jumped ${Math.round(percentChange)}%`;
     } else if (percentChange > 8) {
       tone = "watch";
       label = `⚠️ Weekly spend up ${Math.round(percentChange)}%`;
@@ -1177,13 +1177,13 @@ export function InvoiceIntakeView(props: any) {
   const invoiceReviewFilterOptions = [
     { key: "all", label: "All" },
     { key: "food_cogs", label: "Food" },
-    { key: "consumable_cogs", label: "Consumables" },
+    { key: "consumable_cogs", label: "Kitchen Bits" },
     { key: "needs_fix", label: "Needs Fix" },
     { key: "price_warnings", label: "Price Warnings" },
-    { key: "duplicates", label: "Duplicates" },
+    { key: "duplicates", label: "Double Dips" },
     { key: "non_cogs", label: "Non-COGS" },
-    { key: "unknown", label: "Unknown" },
-    { key: "unmatched_food", label: "Unmatched Food" },
+    { key: "unknown", label: "Mystery" },
+    { key: "unmatched_food", label: "Food No Match" },
   ];
 
   const getInvoiceReviewFilterMatches = (row: any, filterKey: string) => {
@@ -1233,10 +1233,10 @@ export function InvoiceIntakeView(props: any) {
     { key: "needs_fix_first", label: "Needs fix first" },
     { key: "highest_line_total", label: "Highest line total" },
     { key: "food_first", label: "Food first" },
-    { key: "consumables_first", label: "Consumables first" },
-    { key: "unknown_first", label: "Unknown first" },
+    { key: "consumables_first", label: "Kitchen Bits first" },
+    { key: "unknown_first", label: "Mystery first" },
     { key: "price_warnings_first", label: "Price warnings first" },
-    { key: "duplicates_first", label: "Duplicates first" },
+    { key: "duplicates_first", label: "Double Dips first" },
   ];
 
   const getInvoiceReviewSortScore = (row: any, sortKey: string) => {
@@ -1555,7 +1555,7 @@ export function InvoiceIntakeView(props: any) {
         ? "Consumable COGS"
         : nextCogsCategory === "non_cogs"
           ? "Non-COGS"
-          : "Unknown";
+          : "Mystery";
 
     const confirmed = window.confirm(
       `Mark ${displayedSupplierInvoiceRows.length} currently displayed invoice row(s) as ${label}? Hidden rows will not be changed.`
@@ -1712,7 +1712,7 @@ export function InvoiceIntakeView(props: any) {
     const hasInvoiceNumber = Boolean(String(invoiceIntakeMeta?.invoiceNumber || "").trim());
     const hasRows = invoiceFlowSummary.rowsDetected > 0;
     const hasReviewedRows = hasRows && invoiceReviewReadinessSummary.needsFixRowsCount === 0;
-    const hasFoodOrConsumables = invoicePreflightSummary.foodRowsCount > 0 || invoicePreflightSummary.consumableRowsCount > 0 || invoicePreflightSummary.nonCogsRowsCount > 0;
+    const hasFoodOrKitchen Bits = invoicePreflightSummary.foodRowsCount > 0 || invoicePreflightSummary.consumableRowsCount > 0 || invoicePreflightSummary.nonCogsRowsCount > 0;
     const backupReminder = invoiceLockSummary?.isLocked ? "Download backup after lock" : "Download backup before lock";
 
     const checklist = [
@@ -1743,7 +1743,7 @@ export function InvoiceIntakeView(props: any) {
       {
         key: "cogs",
         label: "COGS split checked",
-        done: hasFoodOrConsumables,
+        done: hasFoodOrKitchen Bits,
         helper: `${invoicePreflightSummary.foodRowsCount} food · ${invoicePreflightSummary.consumableRowsCount} consumable · ${invoicePreflightSummary.nonCogsRowsCount} non-COGS`,
       },
       {

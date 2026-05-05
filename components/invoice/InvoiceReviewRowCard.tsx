@@ -168,7 +168,7 @@ export function InvoiceReviewRowCard(props: any) {
               <span style={getInvoiceMatchConfidenceBadgeStyle(row)}>🧠 Learned match</span>
             ) : null}
             {supplierMatchLearningSaved ? (
-              <span style={styles.infoCardSubtext}>Saved for next invoices</span>
+              <span style={styles.infoCardSubtext}>Remembered for next time</span>
             ) : null}
           </div>
           {!isCompactReviewMode ? (
@@ -195,10 +195,10 @@ export function InvoiceReviewRowCard(props: any) {
             <div style={styles.infoCardSubtext}>
               {String(row.qty || "?")} {String(row.unit || "unit")} · Unit {formatCurrency(row.unitPrice || 0)} · Total {formatCurrency(row.lineTotal || row.purchasePrice || 0)}
             </div>
-            <div style={{ ...styles.infoCardSubtext, marginTop: 4 }}>Tap to open the row editor.</div>
+            <div style={{ ...styles.infoCardSubtext, marginTop: 4 }}>Tap to fix this line.</div>
           </button>
         ) : (
-          <div style={styles.infoCardSubtext}>Raw line: {String(row.rawLine || "")}</div>
+          <div style={styles.infoCardSubtext}>Raw OCR mess: {String(row.rawLine || "")}</div>
         )}
         <div
           style={{
@@ -208,14 +208,14 @@ export function InvoiceReviewRowCard(props: any) {
             background: reviewState.level === "low" ? "rgba(127, 29, 29, 0.12)" : "rgba(15, 23, 42, 0.62)",
           }}
         >
-          <div style={styles.infoCardTitle}>{reviewState.level === "low" ? "💀 Fix this row" : "⚡ Quick row actions"}</div>
-          <div style={styles.infoCardSubtext}>One tap. No ceremony. Fix it and GP Police jumps to the next problem.</div>
+          <div style={styles.infoCardTitle}>{reviewState.level === "low" ? "💀 This Line Can Hurt You" : "⚡ Quick Fixes"}</div>
+          <div style={styles.infoCardSubtext}>One tap. No ceremony. Fix it and move on.</div>
           <div style={{ ...styles.buttonRow, marginTop: 10 }}>
-            <button type="button" style={styles.secondaryButton} onClick={() => markRowCogsAndMoveNext("consumable_cogs")}>Mark Consumable</button>
-            <button type="button" style={styles.secondaryButton} onClick={() => markRowCogsAndMoveNext("food_cogs")}>Mark Food</button>
-            <button type="button" style={styles.secondaryButton} onClick={() => markRowCogsAndMoveNext("non_cogs")}>Non-COGS</button>
-            <button type="button" style={styles.secondaryButton} onClick={() => setRowStatusAndMoveNext("ignore")}>Bin This Line</button>
-            <button type="button" style={styles.primaryButton} onClick={() => setInvoiceFixingRowId(isFixPanelOpen ? null : row.id)}>{isFixPanelOpen ? "Close Fix" : "Open Fix"}</button>
+            <button type="button" style={styles.secondaryButton} onClick={() => markRowCogsAndMoveNext("consumable_cogs")}>Kitchen Bits</button>
+            <button type="button" style={styles.secondaryButton} onClick={() => markRowCogsAndMoveNext("food_cogs")}>Food Cost</button>
+            <button type="button" style={styles.secondaryButton} onClick={() => markRowCogsAndMoveNext("non_cogs")}>Not GP</button>
+            <button type="button" style={styles.secondaryButton} onClick={() => setRowStatusAndMoveNext("ignore")}>Bin It</button>
+            <button type="button" style={styles.primaryButton} onClick={() => setInvoiceFixingRowId(isFixPanelOpen ? null : row.id)}>{isFixPanelOpen ? "Close Fix" : "Fix Properly"}</button>
           </div>
         </div>
         <div style={{ ...styles.buttonRow, alignItems: "center" }}>
@@ -244,17 +244,17 @@ export function InvoiceReviewRowCard(props: any) {
               marginTop: 4,
             }}>
               <div style={{ ...styles.infoCardText, color: "#fde68a", fontWeight: 900 }}>
-                Price update suggested
+                Price Smack Detected
               </div>
               <div style={styles.infoCardSubtext}>
-                Current ingredient price: {formatCurrency(priceUpdateSuggestion.currentIngredientPrice || 0)} · Invoice price: {formatCurrency(priceUpdateSuggestion.invoicePrice || 0)} · Increase: {Math.round(priceUpdateSuggestion.percentIncrease || 0)}%
+                Old cost: {formatCurrency(priceUpdateSuggestion.currentIngredientPrice || 0)} · New invoice cost: {formatCurrency(priceUpdateSuggestion.invoicePrice || 0)} · Up: {Math.round(priceUpdateSuggestion.percentIncrease || 0)}%
               </div>
               <button
                 type="button"
                 style={{ ...styles.secondaryButton, marginTop: 8 }}
                 onClick={() => handleUpdateIngredientPriceFromInvoiceRow(row)}
               >
-                Update Ingredient Price
+                Accept New Cost
               </button>
             </div>
           ) : null}
@@ -262,20 +262,20 @@ export function InvoiceReviewRowCard(props: any) {
       </div>
       <div style={styles.buttonRow}>
         <button type="button" style={row.status === "matched" ? styles.primaryButton : styles.secondaryButton} onClick={() => setRowStatusAndMoveNext("matched")}>Matched</button>
-        <button type="button" style={row.status === "create_new" ? styles.primaryButton : styles.secondaryButton} onClick={() => setRowStatusAndMoveNext("create_new")}>Create New</button>
-        <button type="button" style={row.status === "ignore" ? styles.primaryButton : styles.secondaryButton} onClick={() => setRowStatusAndMoveNext("ignore")}>Ignore Line</button>
+        <button type="button" style={row.status === "create_new" ? styles.primaryButton : styles.secondaryButton} onClick={() => setRowStatusAndMoveNext("create_new")}>Create Ingredient</button>
+        <button type="button" style={row.status === "ignore" ? styles.primaryButton : styles.secondaryButton} onClick={() => setRowStatusAndMoveNext("ignore")}>Bin Line</button>
         {canLearnSupplierMatch ? (
           <button type="button" style={supplierMatchLearningSaved ? styles.primaryButton : styles.secondaryButton} onClick={() => handleLearnSupplierMatchFromRow(row)}>
-            {supplierMatchLearningSaved ? "Saved ✓" : "Learn Match"}
+            {supplierMatchLearningSaved ? "Remembered ✓" : "Remember Match"}
           </button>
         ) : null}
-        <button type="button" style={isFixPanelOpen ? styles.primaryButton : styles.secondaryButton} onClick={() => setInvoiceFixingRowId(isFixPanelOpen ? null : row.id)}>{isFixPanelOpen ? "Close Fix Panel" : "Expand Fix Panel"}</button>
+        <button type="button" style={isFixPanelOpen ? styles.primaryButton : styles.secondaryButton} onClick={() => setInvoiceFixingRowId(isFixPanelOpen ? null : row.id)}>{isFixPanelOpen ? "Close Fix" : "Fix Properly"}</button>
       </div>
       {isFixPanelOpen ? (
         <div style={{ ...styles.infoCard, border: "1px solid rgba(245, 158, 11, 0.42)", background: "rgba(245, 158, 11, 0.08)" }}>
-          <div style={styles.infoCardTitle}>Fix Panel Open — Selected Row Only</div>
-          <div style={styles.infoCardSubtext}>Edit the OCR and pack details for this row. Other rows stay closed.</div>
-          <label style={styles.label}>Raw OCR Line</label>
+          <div style={styles.infoCardTitle}>Fix This Row Properly</div>
+          <div style={styles.infoCardSubtext}>Clean the OCR and pack info. One row at a time.</div>
+          <label style={styles.label}>Raw OCR Mess</label>
           <textarea value={row.rawLine || ""} onChange={(event: any) => updateSupplierInvoiceRow(row.id, "rawLine", event.target.value)} style={styles.textarea} />
           <div style={styles.formGrid}>
             <div style={styles.formGroup}><label style={styles.label}>Amount In Pack</label><input value={row.amountInPurchaseUnit || "1"} onChange={(event: any) => updateSupplierInvoiceRow(row.id, "amountInPurchaseUnit", event.target.value)} style={styles.input} /></div>
@@ -303,13 +303,13 @@ export function InvoiceReviewRowCard(props: any) {
             background: "rgba(59, 130, 246, 0.08)",
           }}
         >
-          <div style={styles.infoCardTitle}>Accuracy Lab Row Diagnostics</div>
-          <div style={styles.infoCardSubtext}>Recovery source: {String(row?.recoverySource || row?.parserSource || "current review row")} · Clean key: {getInvoiceDebugCleanName(row)}</div>
+          <div style={styles.infoCardTitle}>Nerd Lab Row Check</div>
+          <div style={styles.infoCardSubtext}>Parser source: {String(row?.recoverySource || row?.parserSource || "current review row")} · Clean key: {getInvoiceDebugCleanName(row)}</div>
           <div style={styles.infoCardSubtext}>Row shape: {String(row?.rowShape || "not scored")} · Shape confidence: {String(row?.rowShapeConfidence || "unknown")} · Parser score: {String(row?.parserScoreContribution ?? "n/a")}</div>
           <div style={{ ...styles.buttonRow, marginTop: 8 }}>
             <span style={getInvoiceCogsCategoryBadgeStyle(row)}>{getInvoiceCogsCategoryLabel(row)}</span>
             <span style={getInvoiceReviewBadgeStyle(row)}>{getInvoiceRowReviewState(row).label}</span>
-            {(row?.suspectedMergedRow || getInvoiceRowMergedWarning(row)) ? <span style={{ ...getInvoiceReviewBadgeStyle({ cogsType: "unknown" }), color: "#fecaca" }}>Possible merged OCR row</span> : null}
+            {(row?.suspectedMergedRow || getInvoiceRowMergedWarning(row)) ? <span style={{ ...getInvoiceReviewBadgeStyle({ cogsType: "unknown" }), color: "#fecaca" }}>Possible mashed-together OCR row</span> : null}
           </div>
           <div style={{ ...styles.formGrid, marginTop: 10 }}>
             <div style={styles.formGroup}>
@@ -329,7 +329,7 @@ export function InvoiceReviewRowCard(props: any) {
               <textarea value={String(row?.cogsCategoryReason || row?.categoryReason || getInvoiceCogsCategoryHelpText(row))} readOnly style={{ ...styles.textarea, minHeight: 80 }} />
             </div>
             <div style={styles.formGroup}>
-              <label style={styles.label}>Match Debug Reason</label>
+              <label style={styles.label}>Match Sniffer Reason</label>
               <textarea value={String(row?.matchReason || row?.matchDebugReason || row?.supplierMatchKey || getInvoiceMatchLabel(row))} readOnly style={{ ...styles.textarea, minHeight: 80 }} />
             </div>
             <div style={styles.formGroup}>
@@ -349,19 +349,19 @@ export function InvoiceReviewRowCard(props: any) {
             background: "rgba(59, 130, 246, 0.08)",
           }}
         >
-          <div style={styles.infoCardTitle}>Match Debug</div>
-          <div style={styles.infoCardSubtext}>Read-only. Shows why this row did or did not match after parsing.</div>
+          <div style={styles.infoCardTitle}>Match Sniffer</div>
+          <div style={styles.infoCardSubtext}>Read-only. Shows why GP Police did or didn’t match it.</div>
           <div style={{ ...styles.formGrid, marginTop: 10 }}>
             <div style={styles.formGroup}>
-              <label style={styles.label}>Cleaned Invoice Row Name</label>
+              <label style={styles.label}>Cleaned Row Name</label>
               <input value={getInvoiceDebugCleanName(row)} readOnly style={styles.input} />
             </div>
             <div style={styles.formGroup}>
-              <label style={styles.label}>Matched Ingredient Name</label>
+              <label style={styles.label}>Matched Ingredient</label>
               <input value={String(row?.matchedIngredientName || "No matched ingredient")} readOnly style={styles.input} />
             </div>
             <div style={styles.formGroup}>
-              <label style={styles.label}>Match Confidence</label>
+              <label style={styles.label}>Match Strength</label>
               <input value={String(row?.matchConfidence || "low")} readOnly style={styles.input} />
             </div>
             <div style={styles.formGroup}>
@@ -373,7 +373,7 @@ export function InvoiceReviewRowCard(props: any) {
               <input value={String(row?.status || "needs_match")} readOnly style={styles.input} />
             </div>
             <div style={styles.formGroup}>
-              <label style={styles.label}>COGS Type / Category</label>
+              <label style={styles.label}>COGS Bucket</label>
               <input value={`${getInvoiceRowCogsType(row)} / ${String(row?.cogsCategory || row?.category || "unknown")}`} readOnly style={styles.input} />
             </div>
           </div>
@@ -384,7 +384,7 @@ export function InvoiceReviewRowCard(props: any) {
           <div style={styles.infoCardSubtext}>Supplier Match Key: {String(row.supplierMatchKey || "Not prepared")}</div>
           <div style={styles.infoCardSubtext}>Supplier For Learning: {String(row.supplierNameForLearning || selectedSupplier?.name || "Unknown supplier")}</div>
           <div style={styles.infoCardSubtext}>Suggested Learning Label: {String(row.suggestedLearningLabel || "No learning label prepared")}</div>
-          <div style={styles.infoCardSubtext}>Learning is prepared only — nothing is saved yet.</div>
+          <div style={styles.infoCardSubtext}>Nothing learned yet until you tell it.</div>
         </div>
       ) : null}
       
@@ -392,7 +392,7 @@ export function InvoiceReviewRowCard(props: any) {
         <>
           <label style={{ ...styles.label, display: "flex", alignItems: "center", gap: 8 }}>
             <input type="checkbox" checked={!!row.selected} onChange={(event: any) => updateSupplierInvoiceRow(row.id, "selected", event.target.checked)} />
-            Use this line for review
+            Use this line
           </label>
           <div style={styles.formGrid}>
         <div style={styles.formGroup}>
@@ -442,7 +442,7 @@ export function InvoiceReviewRowCard(props: any) {
           >
             <option value="food_cogs">Food COGS</option>
             <option value="consumable_cogs">Consumable COGS</option>
-            <option value="non_cogs">Non-COGS / Cleaning / Sundries</option>
+            <option value="non_cogs">Not GP / Cleaning / Sundries</option>
             <option value="unknown">Unknown / Needs Review</option>
           </select>
         </div>

@@ -118,13 +118,13 @@ export function InvoiceUploadPanel(props: any) {
   return (
     <>
       <div style={{ ...styles.infoCard, marginBottom: 12, border: "1px solid rgba(59, 130, 246, 0.34)", background: "rgba(59, 130, 246, 0.08)" }}>
-        <div style={styles.infoCardTitle}>1. Scan / Paste</div>
-        <div style={styles.infoCardSubtext}>Keep it quick: add invoice number/date, scan the photo or paste supplier text, then let GP Police build the fix queue.</div>
+        <div style={styles.infoCardTitle}>1. Get The Invoice In</div>
+        <div style={styles.infoCardSubtext}>Snap it or dump the text. Don’t overthink it — GP Police will sort the mess.</div>
       </div>
 
       <div style={styles.formGrid}>
         <div style={styles.formGroup}>
-          <label style={styles.label}>Invoice Number</label>
+          <label style={styles.label}>Invoice #</label>
           <input
             type="text"
             value={invoiceIntakeMeta.invoiceNumber}
@@ -145,7 +145,7 @@ export function InvoiceUploadPanel(props: any) {
       </div>
       
       <div style={styles.formGroup}>
-        <label style={styles.label}>Upload Text / CSV Export or Invoice Photo</label>
+        <label style={styles.label}>Upload Text / CSV or Snap The Bill</label>
         <input type="file" accept=".txt,.csv,text/plain,text/csv,image/*" onChange={(event: any) => handleSupplierInvoiceFileUpload(event.target.files?.[0] || null)} style={styles.input} />
         <input
           ref={invoiceCameraInputRef}
@@ -161,37 +161,37 @@ export function InvoiceUploadPanel(props: any) {
         />
         <div style={styles.buttonRow}>
           <button type="button" style={styles.secondaryButton} onClick={() => invoiceCameraInputRef.current?.click()}>
-            📷 Take Invoice Photo
+            📷 Snap Invoice
           </button>
         </div>
       </div>
       
       {supplierInvoicePhotoName ? (
         <div style={styles.infoCard}>
-          <div style={styles.infoCardTitle}>Photo uploaded</div>
+          <div style={styles.infoCardTitle}>Invoice photo loaded</div>
           <div style={styles.infoCardText}>{supplierInvoicePhotoName}</div>
           {supplierInvoicePhotoPreviewUrl ? <img src={supplierInvoicePhotoPreviewUrl} alt="Uploaded invoice preview" style={{ width: "100%", maxWidth: 320, borderRadius: 12, marginTop: 10 }} /> : null}
-          <div style={styles.infoCardSubtext}>Scan the bill, fix the risky rows, then lock clean stock into the system.</div>
+          <div style={styles.infoCardSubtext}>Fix the ugly rows, then lock it before GP gets hit.</div>
         </div>
       ) : null}
       
       <div style={styles.formGroup}>
-        <label style={styles.label}>Paste Invoice Text</label>
-        <textarea value={supplierInvoiceText} onChange={(event: any) => setSupplierInvoiceText(event.target.value)} style={styles.textarea} placeholder="Paste supplier invoice text here. Example: Tomato Polpa 2 x 5kg $38.50" />
+        <label style={styles.label}>Dump Invoice Text Here</label>
+        <textarea value={supplierInvoiceText} onChange={(event: any) => setSupplierInvoiceText(event.target.value)} style={styles.textarea} placeholder="Paste the supplier text here. Example: Tomato Polpa 2 x 5kg $38.50" />
       </div>
       
       <div style={styles.buttonRow}>
-        <button type="button" style={styles.primaryButton} onClick={parseInvoiceForSelectedSupplier}>Scan Invoice</button>
-        <button type="button" style={styles.secondaryButton} onClick={handleSaveInvoiceDraft}>Save Draft</button>
-        <button type="button" style={styles.secondaryButton} onClick={handleLoadInvoiceDraft}>Load Draft</button>
-        <button type="button" style={styles.secondaryButton} onClick={handleDeleteInvoiceDraft}>Delete Draft</button>
-        <button type="button" style={styles.secondaryButton} onClick={() => { setSupplierInvoiceText(""); setSupplierInvoiceRows([]); setSupplierInvoiceMessage(""); setInvoiceQualityWarning(""); setInvoiceFixingRowId(null); setInvoiceDraftMessage(""); setSupplierInvoicePhotoName(""); if (supplierInvoicePhotoPreviewUrl) { URL.revokeObjectURL(supplierInvoicePhotoPreviewUrl); setSupplierInvoicePhotoPreviewUrl(""); } }}>Clear Invoice</button>
+        <button type="button" style={styles.primaryButton} onClick={parseInvoiceForSelectedSupplier}>Scan The Damage</button>
+        <button type="button" style={styles.secondaryButton} onClick={handleSaveInvoiceDraft}>Save Mess</button>
+        <button type="button" style={styles.secondaryButton} onClick={handleLoadInvoiceDraft}>Load Mess</button>
+        <button type="button" style={styles.secondaryButton} onClick={handleDeleteInvoiceDraft}>Delete Mess</button>
+        <button type="button" style={styles.secondaryButton} onClick={() => { setSupplierInvoiceText(""); setSupplierInvoiceRows([]); setSupplierInvoiceMessage(""); setInvoiceQualityWarning(""); setInvoiceFixingRowId(null); setInvoiceDraftMessage(""); setSupplierInvoicePhotoName(""); if (supplierInvoicePhotoPreviewUrl) { URL.revokeObjectURL(supplierInvoicePhotoPreviewUrl); setSupplierInvoicePhotoPreviewUrl(""); } }}>Clear The Deck</button>
       </div>
       
       {supplierInvoiceMessage ? <div style={styles.infoCardText}>{supplierInvoiceMessage}</div> : null}
       {invoiceQualityWarning ? <div style={{ ...styles.infoCardText, color: "#fef08a" }}>⚠️ {invoiceQualityWarning}</div> : null}
       {invoiceDraftMessage ? <div style={styles.infoCardText}>{invoiceDraftMessage}</div> : null}
-      {invoiceDraft ? <div style={styles.infoCardSubtext}>Draft status: {String(invoiceDraft.status || "draft")} · Saved: {String(invoiceDraft.updatedAt || invoiceDraft.createdAt || "")}</div> : null}
+      {invoiceDraft ? <div style={styles.infoCardSubtext}>Saved mess: {String(invoiceDraft.status || "draft")} · Saved: {String(invoiceDraft.updatedAt || invoiceDraft.createdAt || "")}</div> : null}
     </>
   );
 }

@@ -126,34 +126,34 @@ export function InvoiceReviewToolbar(props: any) {
         <div id="invoice-review-list" ref={invoiceReviewPanelRef} style={styles.cardInset}>
           <div style={{ ...styles.sectionGroupHeaderRow, alignItems: "center" }}>
             <div>
-              <h3 style={styles.sectionGroupTitle}>Fix & Review Lines</h3>
-              <div style={styles.infoCardSubtext}>Mobile-first review: tap a warning, fix the row, then move to the next problem.</div>
+              <h3 style={styles.sectionGroupTitle}>Fix The Invoice Damage</h3>
+              <div style={styles.infoCardSubtext}>Tap the ugly row, fix it, move on. No spreadsheet therapy.</div>
             </div>
-            <button type="button" style={styles.primaryButton} onClick={handleFixNextInvoiceProblem}>Fix Next Problem</button>
+            <button type="button" style={styles.primaryButton} onClick={handleFixNextInvoiceProblem}>Fix Next Mess</button>
           </div>
       
           <div style={{ ...styles.infoCard, marginTop: 10, border: "1px solid rgba(59, 130, 246, 0.38)", background: "rgba(59, 130, 246, 0.08)" }}>
-            <div style={styles.infoCardTitle}>Autopilot Command</div>
-            <div style={styles.infoCardSubtext}>{invoiceReviewActionPlan?.helper || "GP Police is sorting safe rows from risky rows."}</div>
+            <div style={styles.infoCardTitle}>Autopilot Sorting The Mess</div>
+            <div style={styles.infoCardSubtext}>{invoiceReviewActionPlan?.helper || "GP Police is splitting safe rows from rows that can hurt you."}</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 140px), 1fr))", gap: 10, marginTop: 10 }}>
               <div style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>Ready</div>
+                <div style={styles.infoCardTitle}>Safe</div>
                 <div style={{ ...styles.infoCardText, color: "#bbf7d0" }}>{invoiceReviewActionPlan?.readyRows || 0}</div>
               </div>
               <div style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>Needs Fix</div>
+                <div style={styles.infoCardTitle}>Needs A Decision</div>
                 <div style={{ ...styles.infoCardText, color: (invoiceReviewActionPlan?.needsFixRows || 0) > 0 ? "#fecaca" : "#bbf7d0" }}>{invoiceReviewActionPlan?.needsFixRows || 0}</div>
               </div>
               <div style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>Progress</div>
+                <div style={styles.infoCardTitle}>Cleaned Up</div>
                 <div style={styles.infoCardText}>{invoiceReviewActionPlan?.progressPercent || 0}%</div>
               </div>
             </div>
             <div style={{ ...styles.buttonRow, marginTop: 10 }}>
               <button type="button" style={styles.primaryButton} onClick={handleInvoiceReviewPrimaryAction}>
-                {(invoiceReviewActionPlan?.needsFixRows || 0) > 0 ? "Fix Next Problem" : "Review / Lock"}
+                {(invoiceReviewActionPlan?.needsFixRows || 0) > 0 ? "Fix Next Mess" : "Lock It Down"}
               </button>
-              <button type="button" style={styles.secondaryButton} onClick={handleRefreshInvoiceIntelligence}>Re-check Matching</button>
+              <button type="button" style={styles.secondaryButton} onClick={handleRefreshInvoiceIntelligence}>Run The Sniffer Again</button>
             </div>
           </div>
 
@@ -169,83 +169,83 @@ export function InvoiceReviewToolbar(props: any) {
           }}>
             <div style={styles.infoCardTitle}>Phone Fix Bar</div>
             <div style={{ ...styles.buttonRow, marginTop: 10 }}>
-              <button type="button" style={styles.primaryButton} onClick={handleFixNextInvoiceProblem}>Fix Next Problem</button>
-              <button type="button" style={styles.secondaryButton} onClick={() => handleJumpToInvoiceFilter("needs_fix")}>Fix Only ({invoiceReviewReadinessSummary.needsFixRowsCount})</button>
+              <button type="button" style={styles.primaryButton} onClick={handleFixNextInvoiceProblem}>Fix Next Mess</button>
+              <button type="button" style={styles.secondaryButton} onClick={() => handleJumpToInvoiceFilter("needs_fix")}>Show The Mess ({invoiceReviewReadinessSummary.needsFixRowsCount})</button>
               <button type="button" style={styles.secondaryButton} onClick={() => setInvoiceReviewMode(invoiceReviewMode === "compact" ? "normal" : "compact")}>
-                {invoiceReviewMode === "compact" ? "Full View" : "Compact View"}
+                {invoiceReviewMode === "compact" ? "Full Noise" : "Kitchen View"}
               </button>
             </div>
           </div>
       
           <div style={{ ...styles.infoCard, marginTop: 10, border: "1px solid rgba(59, 130, 246, 0.32)", background: "rgba(59, 130, 246, 0.08)" }}>
-            <div style={styles.infoCardTitle}>Invoice Outcome Summary</div>
-            <div style={styles.infoCardSubtext}>Every parsed row now lands in a clear review bucket. Display only — no invoice data is changed here.</div>
+            <div style={styles.infoCardTitle}>Invoice Scoreboard</div>
+            <div style={styles.infoCardSubtext}>Every row gets a label. Safe, messy, or dangerous.</div>
             <div style={{ ...styles.formGrid, marginTop: 10 }}>
               <div style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>Total Rows</div>
+                <div style={styles.infoCardTitle}>Rows Found</div>
                 <div style={styles.infoCardText}>{invoiceReviewOutcomeSummary.totalReviewRows}</div>
               </div>
               <div style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>Food COGS</div>
+                <div style={styles.infoCardTitle}>Food Cost</div>
                 <div style={{ ...styles.infoCardText, color: invoiceReviewOutcomeSummary.matchedFoodCount > 0 ? "#bbf7d0" : undefined }}>{invoiceReviewOutcomeSummary.matchedFoodCount}</div>
               </div>
               <div style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>Consumables</div>
+                <div style={styles.infoCardTitle}>Kitchen Bits</div>
                 <div style={{ ...styles.infoCardText, color: invoiceReviewOutcomeSummary.matchedConsumableCount > 0 ? "#bfdbfe" : undefined }}>{invoiceReviewOutcomeSummary.matchedConsumableCount}</div>
               </div>
               <div style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>Needs Fix</div>
+                <div style={styles.infoCardTitle}>Needs A Decision</div>
                 <div style={{ ...styles.infoCardText, color: invoiceReviewOutcomeSummary.unknownCount > 0 ? "#fde68a" : undefined }}>{invoiceReviewOutcomeSummary.unknownCount}</div>
               </div>
               <div style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>Price Warnings</div>
+                <div style={styles.infoCardTitle}>Price Smacks</div>
                 <div style={{ ...styles.infoCardText, color: invoiceReviewOutcomeSummary.priceWarningCount > 0 ? "#fca5a5" : undefined }}>{invoiceReviewOutcomeSummary.priceWarningCount}</div>
               </div>
               <div style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>Duplicate Warnings</div>
+                <div style={styles.infoCardTitle}>Double-Dip Warnings</div>
                 <div style={{ ...styles.infoCardText, color: invoiceReviewOutcomeSummary.duplicateWarningCount > 0 ? "#fca5a5" : undefined }}>{invoiceReviewOutcomeSummary.duplicateWarningCount}</div>
               </div>
             </div>
           </div>
       
           <div style={{ ...styles.infoCard, marginTop: 10, border: "1px solid rgba(245, 158, 11, 0.36)", background: "rgba(245, 158, 11, 0.08)" }}>
-            <div style={styles.infoCardTitle}>Tap A Trouble Spot</div>
+            <div style={styles.infoCardTitle}>Tap The Trouble</div>
             <div style={{ ...styles.formGrid, marginTop: 10 }}>
               <button type="button" style={{ ...styles.infoCard, textAlign: "left", cursor: "pointer", border: invoiceReviewWarningSummary.unknownRowsCount > 0 ? "1px solid rgba(245, 158, 11, 0.55)" : styles.infoCard?.border }} onClick={() => handleJumpToInvoiceFilter("unknown")}>
-                <div style={styles.infoCardTitle}>Unknown Rows</div>
+                <div style={styles.infoCardTitle}>Mystery Rows</div>
                 <div style={{ ...styles.infoCardText, color: invoiceReviewWarningSummary.unknownRowsCount > 0 ? "#fde68a" : undefined }}>{invoiceReviewWarningSummary.unknownRowsCount}</div>
-                <div style={styles.infoCardSubtext}>Tap to show category problems</div>
+                <div style={styles.infoCardSubtext}>Show the mystery rows</div>
               </button>
               <button type="button" style={{ ...styles.infoCard, textAlign: "left", cursor: "pointer", border: invoiceReviewWarningSummary.unmatchedFoodCount > 0 ? "1px solid rgba(248, 113, 113, 0.55)" : styles.infoCard?.border }} onClick={() => handleJumpToInvoiceFilter("unmatched_food")}>
-                <div style={styles.infoCardTitle}>Unmatched Food</div>
+                <div style={styles.infoCardTitle}>Food With No Match</div>
                 <div style={{ ...styles.infoCardText, color: invoiceReviewWarningSummary.unmatchedFoodCount > 0 ? "#fecaca" : undefined }}>{invoiceReviewWarningSummary.unmatchedFoodCount}</div>
-                <div style={styles.infoCardSubtext}>Tap to link food rows</div>
+                <div style={styles.infoCardSubtext}>Link the food before locking</div>
               </button>
               <button type="button" style={{ ...styles.infoCard, textAlign: "left", cursor: "pointer", border: invoiceReviewWarningSummary.priceWarningCount > 0 ? "1px solid rgba(248, 113, 113, 0.55)" : styles.infoCard?.border }} onClick={() => handleJumpToInvoiceFilter("price_warnings")}>
-                <div style={styles.infoCardTitle}>Price Warnings</div>
+                <div style={styles.infoCardTitle}>Price Smacks</div>
                 <div style={{ ...styles.infoCardText, color: invoiceReviewWarningSummary.priceWarningCount > 0 ? "#fca5a5" : undefined }}>{invoiceReviewWarningSummary.priceWarningCount}</div>
-                <div style={styles.infoCardSubtext}>Tap to review price spikes</div>
+                <div style={styles.infoCardSubtext}>Check the price punch</div>
               </button>
               <button type="button" style={{ ...styles.infoCard, textAlign: "left", cursor: "pointer", border: invoiceReviewWarningSummary.duplicateWarningCount > 0 ? "1px solid rgba(248, 113, 113, 0.55)" : styles.infoCard?.border }} onClick={() => handleJumpToInvoiceFilter("duplicates")}>
-                <div style={styles.infoCardTitle}>Duplicate Warnings</div>
+                <div style={styles.infoCardTitle}>Double-Dip Warnings</div>
                 <div style={{ ...styles.infoCardText, color: invoiceReviewWarningSummary.duplicateWarningCount > 0 ? "#fca5a5" : undefined }}>{invoiceReviewWarningSummary.duplicateWarningCount}</div>
-                <div style={styles.infoCardSubtext}>Tap to check possible double rows</div>
+                <div style={styles.infoCardSubtext}>Check the double dip</div>
               </button>
             </div>
-            <div style={styles.infoCardSubtext}>These cards now jump straight to the problem rows — no more blind scrolling.</div>
+            <div style={styles.infoCardSubtext}>Tap the problem. GP Police takes you there.</div>
           </div>
       
           <div style={{ ...styles.infoCard, marginTop: 10, border: "1px solid rgba(34, 197, 94, 0.28)", background: "rgba(34, 197, 94, 0.07)" }}>
-            <div style={styles.infoCardTitle}>Lock Readiness</div>
+            <div style={styles.infoCardTitle}>Ready To Lock?</div>
             <div style={{ ...styles.formGrid, marginTop: 10 }}>
               <div style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>Ready Rows</div>
+                <div style={styles.infoCardTitle}>Safe Rows</div>
                 <div style={{ ...styles.infoCardText, color: invoiceReviewReadinessSummary.readyRowsCount > 0 ? "#bbf7d0" : undefined }}>
                   {invoiceReviewReadinessSummary.readyRowsCount}
                 </div>
               </div>
               <div style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>Needs Fix</div>
+                <div style={styles.infoCardTitle}>Needs A Decision</div>
                 <div style={{ ...styles.infoCardText, color: invoiceReviewReadinessSummary.needsFixRowsCount > 0 ? "#fecaca" : undefined }}>
                   {invoiceReviewReadinessSummary.needsFixRowsCount}
                 </div>
@@ -257,13 +257,13 @@ export function InvoiceReviewToolbar(props: any) {
                 </div>
               </div>
               <div style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>Unmatched Food</div>
+                <div style={styles.infoCardTitle}>Food With No Match</div>
                 <div style={{ ...styles.infoCardText, color: invoiceReviewReadinessSummary.unmatchedFoodCount > 0 ? "#fecaca" : undefined }}>
                   {invoiceReviewReadinessSummary.unmatchedFoodCount}
                 </div>
               </div>
               <div style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>Price Warnings</div>
+                <div style={styles.infoCardTitle}>Price Smacks</div>
                 <div style={{ ...styles.infoCardText, color: invoiceReviewReadinessSummary.priceWarningCount > 0 ? "#fca5a5" : undefined }}>
                   {invoiceReviewReadinessSummary.priceWarningCount}
                 </div>
@@ -279,30 +279,30 @@ export function InvoiceReviewToolbar(props: any) {
               background: invoiceSafeToLockTone === "safe" ? "rgba(34, 197, 94, 0.10)" : "rgba(245, 158, 11, 0.10)",
             }}
           >
-            <div style={styles.infoCardTitle}>{invoiceSafeToLockTone === "safe" ? "✅ Safe To Lock Check" : "⚠️ Lock Review Needed"}</div>
-            <div style={styles.infoCardSubtext}>Stage 3 helper. Dirty rows are blocked before commit.</div>
+            <div style={styles.infoCardTitle}>{invoiceSafeToLockTone === "safe" ? "✅ Safe To Lock Check" : "⚠️ Not Ready To Lock"}</div>
+            <div style={styles.infoCardSubtext}>Dirty rows get stopped before they hit stock.</div>
             <div style={styles.infoCardText}>
               {invoiceSafeToLockTone === "safe"
-                ? "No unknown rows or unmatched food rows found. Still check price warnings before locking."
-                : `Review needed: ${invoiceReviewReadinessSummary.unknownRowsCount} unknown row(s), ${invoiceReviewReadinessSummary.unmatchedFoodCount} unmatched food row(s).`}
+                ? "No mystery rows or unmatched food. Still check price smacks."
+                : `Still ugly: ${invoiceReviewReadinessSummary.unknownRowsCount} unknown row(s), ${invoiceReviewReadinessSummary.unmatchedFoodCount} unmatched food row(s).`}
             </div>
           </div>
       
           <div style={{ ...styles.infoCard, marginTop: 10 }}>
-            <div style={styles.infoCardTitle}>Quick Review Checklist</div>
+            <div style={styles.infoCardTitle}>Last Look Before Lock</div>
             <div style={styles.infoCardText}>✅ Scan rows parsed: {(Array.isArray(supplierInvoiceRows) ? supplierInvoiceRows : []).length}</div>
-            <div style={styles.infoCardText}>{invoiceReviewReadinessSummary.unknownRowsCount === 0 ? "✅" : "⚠️"} Review unknown rows</div>
-            <div style={styles.infoCardText}>{invoiceReviewReadinessSummary.unmatchedFoodCount === 0 ? "✅" : "⚠️"} Link unmatched food rows</div>
-            <div style={styles.infoCardText}>{invoiceReviewReadinessSummary.priceWarningCount === 0 ? "✅" : "⚠️"} Check price warnings</div>
-            <div style={styles.infoCardText}>🚔 Lock invoice only after review</div>
+            <div style={styles.infoCardText}>{invoiceReviewReadinessSummary.unknownRowsCount === 0 ? "✅" : "⚠️"} Clear mystery rows</div>
+            <div style={styles.infoCardText}>{invoiceReviewReadinessSummary.unmatchedFoodCount === 0 ? "✅" : "⚠️"} Link food rows</div>
+            <div style={styles.infoCardText}>{invoiceReviewReadinessSummary.priceWarningCount === 0 ? "✅" : "⚠️"} Check price smacks</div>
+            <div style={styles.infoCardText}>🚔 Lock only when the mess is clean</div>
           </div>
           <div style={{ ...styles.buttonRow, position: "sticky", top: 0, zIndex: 5, background: "rgba(10, 10, 12, 0.94)", padding: "10px 0" }}>
             <button type="button" style={styles.secondaryButton} onClick={() => setAllSupplierInvoiceRowsSelected(true)}>Select All</button>
             <button type="button" style={styles.secondaryButton} onClick={() => setAllSupplierInvoiceRowsSelected(false)}>Deselect All</button>
-            <div style={styles.infoCardSubtext}>Selected rows: {invoiceLockSummary.selectedCount} · Total: {formatCurrency(invoiceLockSummary.estimatedTotal)}</div>
-            <div style={styles.infoCardSubtext}>Food: {formatCurrency(invoiceCogsCategoryTotals.food)} · Consumables: {formatCurrency(invoiceCogsCategoryTotals.consumable)} · Unknown: {formatCurrency(invoiceCogsCategoryTotals.unknown)}</div>
+            <div style={styles.infoCardSubtext}>Selected: {invoiceLockSummary.selectedCount} · Total: {formatCurrency(invoiceLockSummary.estimatedTotal)}</div>
+            <div style={styles.infoCardSubtext}>Food: {formatCurrency(invoiceCogsCategoryTotals.food)} · Kitchen Bits: {formatCurrency(invoiceCogsCategoryTotals.consumable)} · Unknown: {formatCurrency(invoiceCogsCategoryTotals.unknown)}</div>
             <button type="button" style={invoiceReviewMode === "normal" ? styles.primaryButton : styles.secondaryButton} onClick={() => setInvoiceReviewMode("normal")}>Normal View</button>
-            <button type="button" style={invoiceReviewMode === "compact" ? styles.primaryButton : styles.secondaryButton} onClick={() => setInvoiceReviewMode("compact")}>Compact View</button>
+            <button type="button" style={invoiceReviewMode === "compact" ? styles.primaryButton : styles.secondaryButton} onClick={() => setInvoiceReviewMode("compact")}>Kitchen View</button>
             <button type="button" style={showInvoiceMatchDebug ? styles.primaryButton : styles.secondaryButton} onClick={() => setShowInvoiceMatchDebug((previous) => !previous)}>
               {showInvoiceMatchDebug ? "Hide Match Debug" : "Show Match Debug"}
             </button>
@@ -336,7 +336,7 @@ export function InvoiceReviewToolbar(props: any) {
             <div style={styles.infoCardSubtext}>Bulk actions only affect the currently displayed rows after search, filter, and sort.</div>
             <div style={{ ...styles.formGrid, marginTop: 12 }}>
               <div style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>Total Rows</div>
+                <div style={styles.infoCardTitle}>Rows Found</div>
                 <div style={styles.infoCardText}>{invoiceReviewVisibilitySummary.totalRows}</div>
               </div>
               <div style={styles.infoCard}>
@@ -356,7 +356,7 @@ export function InvoiceReviewToolbar(props: any) {
               <button type="button" style={styles.secondaryButton} onClick={() => updateDisplayedInvoiceRowsSelected(true)}>Select Displayed</button>
               <button type="button" style={styles.secondaryButton} onClick={() => updateDisplayedInvoiceRowsSelected(false)}>Deselect Displayed</button>
               <button type="button" style={styles.primaryButton} onClick={autoApproveHighConfidenceInvoiceRows}>Auto Approve High Confidence</button>
-              <button type="button" style={styles.secondaryButton} onClick={showOnlyInvoiceRowsNeedingFix}>Show Fix Only</button>
+              <button type="button" style={styles.secondaryButton} onClick={showOnlyInvoiceRowsNeedingFix}>Show Show The Mess</button>
               <button type="button" style={styles.secondaryButton} onClick={() => markDisplayedInvoiceRowsCogsCategory("unknown")}>Mark Displayed Unknown</button>
               <button type="button" style={styles.secondaryButton} onClick={() => markDisplayedInvoiceRowsCogsCategory("consumable_cogs")}>Mark Displayed Consumable</button>
               <button type="button" style={styles.secondaryButton} onClick={() => markDisplayedInvoiceRowsCogsCategory("non_cogs")}>Mark Displayed Non-COGS</button>
@@ -423,7 +423,7 @@ export function InvoiceReviewToolbar(props: any) {
                     </div>
                     <div style={styles.buttonRow}>
                       <button type="button" style={invoiceCanLockSafely ? styles.primaryButton : styles.secondaryButton} onClick={handleSafeLockInvoiceClick}>{invoiceFlowSummary.lockLabel}</button>
-                      <button type="button" style={styles.secondaryButton} onClick={showOnlyInvoiceRowsNeedingFix}>Show Fix Only</button>
+                      <button type="button" style={styles.secondaryButton} onClick={showOnlyInvoiceRowsNeedingFix}>Show Show The Mess</button>
                       <button type="button" style={styles.secondaryButton} onClick={autoApproveHighConfidenceInvoiceRows}>Auto Approve High Confidence</button>
                       <button type="button" style={styles.secondaryButton} onClick={handleSaveInvoiceDraft}>Save Review Draft</button>
                     </div>
