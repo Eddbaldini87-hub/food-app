@@ -7,6 +7,8 @@ const normalizeText = (value: any) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const formatMoneyInline = (value: any) => `$${safeNumber(value).toFixed(2)}`;
+
 const getRowMoneyValue = (row: any) => {
   const value = safeNumber(row?.lineTotal ?? row?.total ?? row?.amount ?? row?.purchasePrice ?? row?.unitPrice);
   return Number.isFinite(value) ? value : 0;
@@ -115,6 +117,71 @@ const buildIngredientPriceEvents = (lockedInvoiceHistory: any[], supplierIngredi
     .sort((a: any, b: any) => b.percentIncrease - a.percentIncrease);
 };
 
+const getAlertPriority = (level: string) => {
+  if (level === "danger") return 3;
+  if (level === "warning") return 2;
+  return 1;
+};
+
+const uniqueAlerts = (alerts: any[]) => {
+  const seen = new Set<string>();
+  return alerts
+    .filter((alert: any) => {
+      const key = `${alert.level || "watch"}:${alert.title || ""}:${alert.detail || ""}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a: any, b: any) => getAlertPriority(b.level) - getAlertPriority(a.level));
+};
+
+const buildDecisionActions = (affectedRecipes: any[], priceEvents: any[], totalWeeklyDamage: number) => {
+  const actions: any[] = [];
+  const worstRecipe = affectedRecipes[0];
+  const worstIngredient = priceEvents[0];
+
+  if (worstRecipe?.recipeName && safeNumber(worstRecipe.estimatedCostIncreasePerServe) > 0) {
+    const suggestedPriceRise = Math.ceil(safeNumber(worstRecipe.estimatedCostIncreasePerServe) * 2) / 2;
+    actions.push({
+      level: safeNumber(worstRecipe.estimatedWeeklyDamage) >= 100 ? "danger" : "warning",
+      title: `Fix ${worstRecipe.recipeName}`,
+      action: `Review sell price or portion. Suggested minimum price lift: ${formatMoneyInline(suggestedPriceRise)}.`,
+      reason: `${worstRecipe.ingredientName} is adding about ${formatMoneyInline(worstRecipe.estimatedCostIncreasePerServe)} per serve${safeNumber(worstRecipe.weeklySalesEstimate) > 0 ? ` and about ${formatMoneyInline(worstRecipe.estimatedWeeklyDamage)} per week.` : "."}`,
+      recipeId: worstRecipe.recipeId,
+    });
+  }
+
+  if (worstIngredient?.ingredientName) {
+    actions.push({
+      level: safeNumber(worstIngredient.percentIncrease) >= 25 ? "danger" : "warning",
+      title: `Challenge ${worstIngredient.supplierName || "supplier"}`,
+      action: `Check ${worstIngredient.ingredientName} invoice price before accepting the next order.`,
+      reason: `${worstIngredient.ingredientName} is up ${Math.round(safeNumber(worstIngredient.percentIncrease))}% against known cost.`,
+      ingredientId: worstIngredient.ingredientId,
+    });
+  }
+
+  if (safeNumber(totalWeeklyDamage) > 0 && !affectedRecipes.some((recipe: any) => safeNumber(recipe.weeklySalesEstimate) > 0)) {
+    actions.push({
+      level: "watch",
+      title: "Connect POS sales for sharper damage",
+      action: "Upload POS sales so GP Police can convert per-serve leaks into weekly dollar damage.",
+      reason: "Recipe impact exists, but weekly sales volume is missing or incomplete.",
+    });
+  }
+
+  if (actions.length === 0) {
+    actions.push({
+      level: "watch",
+      title: "No major GP attack detected yet",
+      action: "Keep locking invoices and matching ingredients. The decision engine gets stronger with more locked invoice history.",
+      reason: "No ingredient price events over the alert threshold were found.",
+    });
+  }
+
+  return actions.slice(0, 6);
+};
+
 export function buildGpImpactSummary(args: {
   supplierIngredients: any[];
   computedRecipes: any[];
@@ -182,6 +249,7 @@ export function buildGpImpactSummary(args: {
 
     affectedRecipeMap.set(key, {
       ...existing,
+      ingredientName: existing.ingredientName === impact.ingredientName ? existing.ingredientName : "Multiple ingredients",
       estimatedCostIncreasePerServe: existing.estimatedCostIncreasePerServe + impact.estimatedCostIncreasePerServe,
       estimatedWeeklyDamage: existing.estimatedWeeklyDamage + impact.estimatedWeeklyDamage,
       gpDropPercent: existing.gpDropPercent + impact.gpDropPercent,
@@ -198,26 +266,66 @@ export function buildGpImpactSummary(args: {
   const totalWeeklyDamage = affectedRecipes.reduce((sum: number, recipe: any) => sum + safeNumber(recipe.estimatedWeeklyDamage), 0);
   const totalPerServeDamage = affectedRecipes.reduce((sum: number, recipe: any) => sum + safeNumber(recipe.estimatedCostIncreasePerServe), 0);
 
-  const alerts = [
-    ...biggestIngredientRisks.slice(0, 3).map((event: any) => ({
+  const baseAlerts = [
+    ...biggestIngredientRisks.slice(0, 5).map((event: any) => ({
       level: event.percentIncrease >= 25 ? "danger" : event.percentIncrease >= 15 ? "warning" : "watch",
       title: `${event.ingredientName} +${Math.round(event.percentIncrease)}%`,
       detail: `${event.supplierName || "Supplier"} invoice price is above known cost. Check affected recipes before the GP leaks.`,
       ingredientId: event.ingredientId,
+      category: "price_spike",
     })),
-    ...affectedRecipes.slice(0, 3).map((recipe: any) => ({
+    ...affectedRecipes.slice(0, 5).map((recipe: any) => ({
       level: recipe.estimatedWeeklyDamage > 100 ? "danger" : recipe.estimatedCostIncreasePerServe > 1 ? "warning" : "watch",
       title: `${recipe.recipeName} GP impact`,
-      detail: `${recipe.ingredientName} is estimated to add $${recipe.estimatedCostIncreasePerServe.toFixed(2)} per serve${recipe.weeklySalesEstimate > 0 ? ` · about $${recipe.estimatedWeeklyDamage.toFixed(0)} weekly damage` : ""}.`,
+      detail: `${recipe.ingredientName} is estimated to add ${formatMoneyInline(recipe.estimatedCostIncreasePerServe)} per serve${recipe.weeklySalesEstimate > 0 ? ` · about ${formatMoneyInline(recipe.estimatedWeeklyDamage)} weekly damage` : ""}.`,
       recipeId: recipe.recipeId,
+      category: "recipe_damage",
     })),
   ];
+
+  const totalDamageAlert = safeNumber(totalWeeklyDamage) >= 250
+    ? [{
+        level: "danger",
+        title: `Weekly GP damage ${formatMoneyInline(totalWeeklyDamage)}`,
+        detail: "Main Hideout should review affected dishes before the next service window.",
+        category: "weekly_damage",
+      }]
+    : safeNumber(totalWeeklyDamage) > 0
+      ? [{
+          level: "warning",
+          title: `Weekly GP leak ${formatMoneyInline(totalWeeklyDamage)}`,
+          detail: "There is measurable menu damage from supplier price movement.",
+          category: "weekly_damage",
+        }]
+      : [];
+
+  const alerts = uniqueAlerts([...totalDamageAlert, ...baseAlerts]).slice(0, 10);
+  const recommendedActions = buildDecisionActions(affectedRecipes, biggestIngredientRisks, totalWeeklyDamage);
+  const dangerAlertCount = alerts.filter((alert: any) => alert.level === "danger").length;
+  const warningAlertCount = alerts.filter((alert: any) => alert.level === "warning").length;
+
+  const decisionSummary = {
+    status: dangerAlertCount > 0 ? "danger" : warningAlertCount > 0 ? "warning" : alerts.length > 0 ? "watch" : "quiet",
+    headline: dangerAlertCount > 0
+      ? "GP under attack"
+      : warningAlertCount > 0
+        ? "GP needs review"
+        : alerts.length > 0
+          ? "GP watchlist active"
+          : "GP stable",
+    topAction: recommendedActions[0]?.action || "Keep locking invoices and matching ingredients.",
+    totalActionCount: recommendedActions.length,
+  };
 
   return {
     affectedRecipes,
     biggestLosers: affectedRecipes.slice(0, 8),
     biggestIngredientRisks,
     alerts,
+    recommendedActions,
+    decisionSummary,
+    dangerAlertCount,
+    warningAlertCount,
     totalWeeklyDamage,
     totalPerServeDamage,
     affectedRecipeCount: affectedRecipes.length,
