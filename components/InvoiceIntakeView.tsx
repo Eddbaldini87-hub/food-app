@@ -19,6 +19,7 @@ export function InvoiceIntakeView(props: any) {
     supplierInvoiceText,
     setSupplierInvoiceText,
     parseInvoiceForSelectedSupplier,
+    refreshInvoiceRowIntelligence,
     handleSaveInvoiceDraft,
     handleLoadInvoiceDraft,
     handleDeleteInvoiceDraft,
@@ -1391,6 +1392,131 @@ export function InvoiceIntakeView(props: any) {
 
   const invoiceSafeToLockTone = invoiceReviewReadinessSummary.unknownRowsCount === 0 && invoiceReviewReadinessSummary.unmatchedFoodCount === 0 ? "safe" : "warning";
 
+  const invoiceLockBlockingSummary = (() => {
+    const rows = Array.isArray(supplierInvoiceRows) ? supplierInvoiceRows : [];
+    const selectedRows = rows.filter((row: any) => row?.selected !== false && String(row?.status || "").toLowerCase() !== "ignore");
+
+    return selectedRows.reduce(
+      (summary: any, row: any) => {
+        const cogsType = getInvoiceRowCogsType(row);
+        const linkedIngredientId = String(row?.linkedIngredientId || "").trim();
+        const status = String(row?.status || "").toLowerCase();
+        const name = String(row?.name || "").trim();
+        const lineValue = getInvoiceRowMoneyValue(row);
+
+        if (cogsType === "unknown") summary.unknownRowsCount += 1;
+        if (cogsType === "food_cogs" && !linkedIngredientId && status !== "create_new") summary.unlinkedFoodRowsCount += 1;
+        if (!name) summary.missingNameRowsCount += 1;
+        if (lineValue <= 0) summary.missingValueRowsCount += 1;
+
+        summary.selectedRowsCount += 1;
+        return summary;
+      },
+      {
+        selectedRowsCount: 0,
+        unknownRowsCount: 0,
+        unlinkedFoodRowsCount: 0,
+        missingNameRowsCount: 0,
+        missingValueRowsCount: 0,
+      }
+    );
+  })();
+
+  const invoiceCanLockSafely =
+    !invoiceLockSummary?.isLocked &&
+    invoiceLockBlockingSummary.selectedRowsCount > 0 &&
+    invoiceLockBlockingSummary.unknownRowsCount === 0 &&
+    invoiceLockBlockingSummary.unlinkedFoodRowsCount === 0 &&
+    invoiceLockBlockingSummary.missingNameRowsCount === 0 &&
+    invoiceLockBlockingSummary.missingValueRowsCount === 0;
+
+  const invoiceReviewActionPlan = (() => {
+    const rows = Array.isArray(supplierInvoiceRows) ? supplierInvoiceRows : [];
+    const totalRows = rows.length;
+    const readyRows = Number(invoiceReviewReadinessSummary.readyRowsCount || 0);
+    const needsFixRows = Number(invoiceReviewReadinessSummary.needsFixRowsCount || 0);
+    const selectedRows = Number(invoiceLockBlockingSummary.selectedRowsCount || 0);
+    const progressPercent = totalRows > 0 ? Math.round((readyRows / totalRows) * 100) : 0;
+
+    const blockers = [
+      invoiceLockBlockingSummary.selectedRowsCount <= 0 ? "select at least one row" : null,
+      invoiceLockBlockingSummary.unknownRowsCount > 0 ? `${invoiceLockBlockingSummary.unknownRowsCount} unknown row(s)` : null,
+      invoiceLockBlockingSummary.unlinkedFoodRowsCount > 0 ? `${invoiceLockBlockingSummary.unlinkedFoodRowsCount} unlinked food row(s)` : null,
+      invoiceLockBlockingSummary.missingNameRowsCount > 0 ? `${invoiceLockBlockingSummary.missingNameRowsCount} row(s) missing name` : null,
+      invoiceLockBlockingSummary.missingValueRowsCount > 0 ? `${invoiceLockBlockingSummary.missingValueRowsCount} row(s) missing total` : null,
+    ].filter(Boolean);
+
+    let headline = "Scan an invoice to start the review lane";
+    let helper = "GP Police will show what is safe, what needs fixing, and what is blocked before lock.";
+    let tone = "idle";
+
+    if (totalRows > 0 && invoiceCanLockSafely) {
+      headline = "Clean enough to lock";
+      helper = `${selectedRows} selected row(s) ready. Take a backup, then lock the invoice.`;
+      tone = "safe";
+    } else if (totalRows > 0 && needsFixRows > 0) {
+      headline = `Fix ${needsFixRows} risky row(s)`;
+      helper = blockers.length ? `Blocked by: ${blockers.join(" · ")}.` : "Use Fix Next to walk the invoice down.";
+      tone = "danger";
+    } else if (totalRows > 0) {
+      headline = "Final review recommended";
+      helper = "Rows look mostly clean. Check totals, then lock when ready.";
+      tone = "warning";
+    }
+
+    return {
+      headline,
+      helper,
+      tone,
+      totalRows,
+      readyRows,
+      needsFixRows,
+      selectedRows,
+      progressPercent,
+      blockers,
+    };
+  })();
+
+  const getInvoiceReviewActionPanelStyle = (): any => {
+    const baseStyle = {
+      ...styles.infoCard,
+      border: "1px solid rgba(255, 255, 255, 0.16)",
+      marginBottom: 14,
+    };
+
+    if (invoiceReviewActionPlan.tone === "safe") {
+      return { ...baseStyle, borderColor: "rgba(34, 197, 94, 0.48)", background: "rgba(34, 197, 94, 0.10)" };
+    }
+
+    if (invoiceReviewActionPlan.tone === "danger") {
+      return { ...baseStyle, borderColor: "rgba(248, 113, 113, 0.48)", background: "rgba(127, 29, 29, 0.14)" };
+    }
+
+    if (invoiceReviewActionPlan.tone === "warning") {
+      return { ...baseStyle, borderColor: "rgba(245, 158, 11, 0.44)", background: "rgba(245, 158, 11, 0.08)" };
+    }
+
+    return baseStyle;
+  };
+
+  const handleRefreshInvoiceIntelligence = () => {
+    if (typeof refreshInvoiceRowIntelligence === "function") {
+      refreshInvoiceRowIntelligence();
+      return;
+    }
+
+    parseInvoiceForSelectedSupplier();
+  };
+
+  const handleInvoiceReviewPrimaryAction = () => {
+    if (invoiceCanLockSafely) {
+      handleSafeLockInvoiceClick();
+      return;
+    }
+
+    handleFixNextInvoiceProblem();
+  };
+
   const handleLearnSupplierMatchFromRow = (row: any) => {
     const linkedIngredientId = String(row?.linkedIngredientId || "").trim();
     const supplierMatchKey = String(row?.supplierMatchKey || "").trim();
@@ -1532,44 +1658,6 @@ export function InvoiceIntakeView(props: any) {
       }
     }, 120);
   };
-
-  const invoiceLockBlockingSummary = (() => {
-    const rows = Array.isArray(supplierInvoiceRows) ? supplierInvoiceRows : [];
-    const selectedRows = rows.filter((row: any) => row?.selected !== false && String(row?.status || "").toLowerCase() !== "ignore");
-
-    return selectedRows.reduce(
-      (summary: any, row: any) => {
-        const cogsType = getInvoiceRowCogsType(row);
-        const linkedIngredientId = String(row?.linkedIngredientId || "").trim();
-        const status = String(row?.status || "").toLowerCase();
-        const name = String(row?.name || "").trim();
-        const lineValue = getInvoiceRowMoneyValue(row);
-
-        if (cogsType === "unknown") summary.unknownRowsCount += 1;
-        if (cogsType === "food_cogs" && !linkedIngredientId && status !== "create_new") summary.unlinkedFoodRowsCount += 1;
-        if (!name) summary.missingNameRowsCount += 1;
-        if (lineValue <= 0) summary.missingValueRowsCount += 1;
-
-        summary.selectedRowsCount += 1;
-        return summary;
-      },
-      {
-        selectedRowsCount: 0,
-        unknownRowsCount: 0,
-        unlinkedFoodRowsCount: 0,
-        missingNameRowsCount: 0,
-        missingValueRowsCount: 0,
-      }
-    );
-  })();
-
-  const invoiceCanLockSafely =
-    !invoiceLockSummary?.isLocked &&
-    invoiceLockBlockingSummary.selectedRowsCount > 0 &&
-    invoiceLockBlockingSummary.unknownRowsCount === 0 &&
-    invoiceLockBlockingSummary.unlinkedFoodRowsCount === 0 &&
-    invoiceLockBlockingSummary.missingNameRowsCount === 0 &&
-    invoiceLockBlockingSummary.missingValueRowsCount === 0;
 
   const invoiceFlowSummary = (() => {
     const rows = Array.isArray(supplierInvoiceRows) ? supplierInvoiceRows : [];
@@ -1834,6 +1922,10 @@ export function InvoiceIntakeView(props: any) {
     invoiceReviewOutcomeSummary,
     invoiceReviewWarningSummary,
     invoiceSafeToLockTone,
+    invoiceReviewActionPlan,
+    getInvoiceReviewActionPanelStyle,
+    handleRefreshInvoiceIntelligence,
+    handleInvoiceReviewPrimaryAction,
     invoiceReviewMode,
     setInvoiceReviewMode,
     invoiceReviewSearchTerm,
@@ -1884,6 +1976,54 @@ export function InvoiceIntakeView(props: any) {
                 <InvoiceUploadPanel {...invoiceComponentProps} />
                 <InvoiceAccuracyLabPanel {...invoiceComponentProps} />
                 <InvoiceLockHistoryPanel {...invoiceComponentProps} />
+
+                <div style={getInvoiceReviewActionPanelStyle()}>
+                  <div style={styles.sectionGroupHeaderRow}>
+                    <div>
+                      <h3 style={styles.sectionGroupTitle}>{invoiceReviewActionPlan.headline}</h3>
+                      <div style={styles.infoCardSubtext}>{invoiceReviewActionPlan.helper}</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      <span style={getInvoiceReviewBadgeStyle({ cogsType: invoiceCanLockSafely ? "food_cogs" : "unknown" })}>
+                        {invoiceReviewActionPlan.progressPercent}% READY
+                      </span>
+                      <span style={styles.statusBadge}>
+                        {invoiceReviewActionPlan.selectedRows} SELECTED
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))", gap: 10, marginTop: 12 }}>
+                    <div style={styles.infoCard}>
+                      <strong>{invoiceReviewActionPlan.totalRows}</strong>
+                      <div style={styles.infoCardSubtext}>Rows detected</div>
+                    </div>
+                    <div style={styles.infoCard}>
+                      <strong>{invoiceReviewActionPlan.readyRows}</strong>
+                      <div style={styles.infoCardSubtext}>Ready rows</div>
+                    </div>
+                    <div style={styles.infoCard}>
+                      <strong>{invoiceReviewActionPlan.needsFixRows}</strong>
+                      <div style={styles.infoCardSubtext}>Need fixing</div>
+                    </div>
+                  </div>
+
+                  <div style={{ ...styles.buttonRow, marginTop: 14 }}>
+                    <button type="button" style={invoiceCanLockSafely ? styles.primaryButton : styles.secondaryButton} onClick={handleInvoiceReviewPrimaryAction}>
+                      {invoiceCanLockSafely ? "🚔 Lock clean invoice" : "🔎 Fix next problem"}
+                    </button>
+                    <button type="button" style={styles.secondaryButton} onClick={showOnlyInvoiceRowsNeedingFix}>
+                      Show fix-only lane
+                    </button>
+                    <button type="button" style={styles.secondaryButton} onClick={autoApproveHighConfidenceInvoiceRows}>
+                      Auto-select clean rows
+                    </button>
+                    <button type="button" style={styles.secondaryButton} onClick={handleRefreshInvoiceIntelligence}>
+                      Re-check matching
+                    </button>
+                  </div>
+                </div>
+
                 <InvoicePreflightPanel {...invoiceComponentProps} />
                 <InvoiceReviewToolbar {...invoiceComponentProps} />
               </div>

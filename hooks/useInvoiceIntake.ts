@@ -424,6 +424,42 @@ export function useInvoiceIntake(args: UseInvoiceIntakeArgs) {
     setSupplierInvoiceMessage(rows.length > 0 ? `Invoice text found. ${rows.length} row${rows.length === 1 ? "" : "s"} detected — review before locking into ingredients.${invoiceRowRecovery.recoveryUsed ? " Row recovery was used." : ""}` : qualityWarning || "No clear invoice rows detected — try a flatter photo or paste text.");
   };
 
+  const refreshInvoiceRowIntelligence = () => {
+    const rows = Array.isArray(supplierInvoiceRows) ? supplierInvoiceRows : [];
+    const supplierName = String(selectedSupplier?.name || invoiceSpendForm.supplierName || rows[0]?.supplierName || "Unknown Supplier").trim() || "Unknown Supplier";
+
+    if (!rows.length) {
+      setSupplierInvoiceMessage("No invoice rows to re-check yet. Scan or paste an invoice first.");
+      return;
+    }
+
+    const refreshedRows = applyInvoiceIngredientAutoMatching(
+      applyInvoiceCogsCategoryDetection(rows, supplierName),
+      supplierIngredients
+    );
+
+    const beforeReadyCount = rows.filter((row: any) => {
+      const cogsType = getInvoiceRowCogsTypeForApp(row);
+      const linkedIngredientId = String(row?.linkedIngredientId || "").trim();
+      const status = String(row?.status || "").toLowerCase();
+      return cogsType !== "unknown" && (cogsType !== "food_cogs" || linkedIngredientId || status === "create_new" || status === "ignore");
+    }).length;
+
+    const afterReadyCount = refreshedRows.filter((row: any) => {
+      const cogsType = getInvoiceRowCogsTypeForApp(row);
+      const linkedIngredientId = String(row?.linkedIngredientId || "").trim();
+      const status = String(row?.status || "").toLowerCase();
+      return cogsType !== "unknown" && (cogsType !== "food_cogs" || linkedIngredientId || status === "create_new" || status === "ignore");
+    }).length;
+
+    setSupplierInvoiceRows(refreshedRows as any[]);
+    setSupplierInvoiceMessage(
+      afterReadyCount > beforeReadyCount
+        ? `Re-checked invoice rows. ${afterReadyCount - beforeReadyCount} extra row(s) now look ready.`
+        : "Re-checked invoice rows with current supplier, COGS, and match memory."
+    );
+  };
+
   const handleSupplierInvoiceFileUpload = async (file: File | null) => {
     if (!file) {
       alert("No file selected");
@@ -1400,6 +1436,7 @@ Continue locking this invoice?`);
     invoiceFixingRowId,
     setInvoiceFixingRowId,
     parseInvoiceForSelectedSupplier,
+    refreshInvoiceRowIntelligence,
     handleSupplierInvoiceFileUpload,
     updateSupplierInvoiceRow,
     handleSaveSupplierMatchMemory,
