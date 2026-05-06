@@ -46,6 +46,12 @@ export function Dashboard(props: any) {
   const lastWeekDamage = safeNumber(gpDamageSummary.lastWeekDamage);
   const damageRising = thisWeekDamage > 0 && thisWeekDamage > lastWeekDamage;
   const topStockDamage = stockDamageReport[0] || null;
+  const thisWeekInvoiceSpend = safeNumber(props.invoiceWeeklySummary?.thisWeekSpend ?? props.thisWeekInvoiceSpend ?? totalInvoiceSpend);
+  const stockWarningCount = stockDamageReport.length;
+  const dashboardProblemCount = recipeIssueCount + stockWarningCount + (gpImpactSummary.totalWeeklyDamage > 0 ? 1 : 0) + (invoiceRecords.length === 0 ? 1 : 0);
+  const gpDamageThisWeek = safeNumber(gpImpactSummary.totalWeeklyDamage || gpDamageSummary.thisWeekDamage || 0);
+  const latestRecipes = finalDishes.slice(-3).reverse();
+  const problemRecipeCount = recipeIssueCount;
 
   const openInvoiceCamera = () => {
     if (typeof props.handleOpenInvoiceCamera === "function") {
@@ -63,9 +69,9 @@ export function Dashboard(props: any) {
   const nextAction = (() => {
     if (safeNumber(gpImpactSummary.totalWeeklyDamage) > 0) {
       return {
-        label: "💀 Your menu is getting hit",
-        detail: `${gpImpactSummary.affectedRecipeCount || 0} dish(es) are copping supplier price punches. Weekly damage: ${formatMoney(gpImpactSummary.totalWeeklyDamage)}.`,
-        button: "Show Me The Damage",
+        label: "💀 Menu damage detected",
+        detail: `${gpImpactSummary.affectedRecipeCount || 0} dish(es) are getting mugged by supplier prices. Weekly damage: ${formatMoney(gpImpactSummary.totalWeeklyDamage)}.`,
+        button: "Show The Damage",
         action: () => props.handleSidebarNavigation?.("menu"),
       };
     }
@@ -73,8 +79,8 @@ export function Dashboard(props: any) {
     if (damageRising) {
       return {
         label: "💀 GP is bleeding harder this week",
-        detail: `This week: ${formatMoney(thisWeekDamage)} vs ${formatMoney(lastWeekDamage)} last week. Open the damage and stop the leak.`,
-        button: "Show Me The Damage",
+        detail: `This week: ${formatMoney(thisWeekDamage)} vs ${formatMoney(lastWeekDamage)} last week. Open the damage board and stop the leak before the till cops it.`,
+        button: "Show The Damage",
         action: () => props.handleSidebarNavigation?.("menu"),
       };
     }
@@ -82,7 +88,7 @@ export function Dashboard(props: any) {
     if (topStockDamage) {
       return {
         label: "🚨 Stock is walking out the back door",
-        detail: `${topStockDamage.ingredientName || "An ingredient"} is leaking ${formatLossQuantity(topStockDamage.loss)} ${topStockDamage.purchaseUnit || "unit"} damage.`,
+        detail: `${topStockDamage.ingredientName || "An ingredient"} is doing a runner: ${formatLossQuantity(topStockDamage.loss)} ${topStockDamage.purchaseUnit || "unit"} damage.`,
         button: "Open Stock Damage",
         action: () => props.handleSidebarNavigation?.("stock"),
       };
@@ -91,7 +97,7 @@ export function Dashboard(props: any) {
     if (recipeIssueCount > 0) {
       return {
         label: "⚠️ Recipes are half-dressed",
-        detail: `${recipeIssueCount} recipe problem(s) need fixing before you trust the GP.`,
+        detail: `${recipeIssueCount} recipe problem(s) need fixing before you trust the numbers.`,
         button: "Fix Recipes",
         action: () => props.handleSidebarNavigation?.("recipes"),
       };
@@ -99,16 +105,16 @@ export function Dashboard(props: any) {
 
     if (invoiceRecords.length === 0) {
       return {
-        label: "📸 Feed me an invoice",
-        detail: "Snap a supplier bill. No invoice, no evidence, no police work.",
+        label: "📸 Feed the beast an invoice",
+        detail: "Snap a supplier bill. No evidence, no arrest. Simple.",
         button: "Snap Invoice",
         action: openInvoiceCamera,
       };
     }
 
     return {
-      label: "✅ Nothing screaming right now",
-      detail: "No fires on the board. Snap the next invoice and keep the pressure on suppliers.",
+      label: "✅ No alarms screaming right now",
+      detail: "No fires on the board. Keep feeding invoices and keep suppliers honest.",
       button: "Snap Invoice",
       action: openInvoiceCamera,
     };
@@ -145,11 +151,164 @@ export function Dashboard(props: any) {
       ? { border: "1px solid rgba(245, 158, 11, 0.42)", background: "rgba(245, 158, 11, 0.10)" }
       : { border: "1px solid rgba(148, 163, 184, 0.26)", background: "rgba(15, 23, 42, 0.55)" };
 
+  const openRecipeSearch = () => {
+    props.handleSidebarNavigation?.("recipes");
+  };
+
+  const openStocktake = () => {
+    props.handleSidebarNavigation?.("stocktake");
+  };
+
+  const openStockHub = () => {
+    props.handleSidebarNavigation?.("stock");
+  };
+
+  const openInvoiceFolder = () => {
+    props.handleSidebarNavigation?.("invoice");
+  };
+
+  const dashboardCommandGridStyle = {
+    display: "grid",
+    gridTemplateColumns: isMobileViewport ? "1fr" : "repeat(3, minmax(0, 1fr))",
+    gap: 12,
+    marginTop: 16,
+  };
+
+  const commandButtonStyle = {
+    ...styles.infoCard,
+    textAlign: "left" as const,
+    cursor: "pointer",
+    minHeight: isMobileViewport ? 92 : 116,
+    border: "1px solid rgba(251, 191, 36, 0.24)",
+    background: "linear-gradient(135deg, rgba(251, 191, 36, 0.10), rgba(15, 23, 42, 0.78))",
+  };
+
+  const commandButtonTitleStyle = {
+    ...styles.infoCardTitle,
+    fontSize: isMobileViewport ? 16 : 18,
+  };
+
+  const commandBarStyle = {
+    ...styles.card,
+    display: "grid",
+    gridTemplateColumns: isMobileViewport ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))",
+    gap: 10,
+    padding: isMobileViewport ? 14 : 18,
+    border: "1px solid rgba(251, 191, 36, 0.34)",
+    background: "linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(120, 53, 15, 0.34))",
+  };
+
+  const commandBarItemStyle = {
+    ...styles.infoCard,
+    padding: isMobileViewport ? 12 : 14,
+    minHeight: isMobileViewport ? 78 : 92,
+    background: "rgba(2, 6, 23, 0.58)",
+  };
+
+  const fastActionGridStyle = {
+    display: "grid",
+    gridTemplateColumns: isMobileViewport ? "1fr 1fr" : "repeat(5, minmax(0, 1fr))",
+    gap: 10,
+    marginTop: 12,
+  };
+
+  const smartAlertStyle = {
+    ...styles.card,
+    border: gpDamageThisWeek > 0 || dashboardProblemCount > 0 ? "1px solid rgba(248, 113, 113, 0.42)" : "1px solid rgba(34, 197, 94, 0.34)",
+    background: gpDamageThisWeek > 0 || dashboardProblemCount > 0
+      ? "linear-gradient(135deg, rgba(127, 29, 29, 0.34), rgba(15, 23, 42, 0.92))"
+      : "linear-gradient(135deg, rgba(6, 78, 59, 0.24), rgba(15, 23, 42, 0.92))",
+  };
+
+  const smartAlertText = (() => {
+    if (gpDamageThisWeek > 0) return `💀 You’re bleeding ${formatMoney(gpDamageThisWeek)} this week. Mate, that margin is cooked until you fix the damage.`;
+    if (invoiceRecords.length === 0) return "⚠️ No invoices loaded. GP Police can’t do its job without evidence. Snap the bill first.";
+    if (stockWarningCount > 0) return `🚨 ${stockWarningCount} stock warning${stockWarningCount === 1 ? "" : "s"} detected. Theft, waste, miscount, or bad ordering — go check it.`;
+    if (problemRecipeCount > 0) return `⚠️ ${problemRecipeCount} recipe issue${problemRecipeCount === 1 ? "" : "s"}. GP Police can’t cost thin air.`;
+    return "✅ Nothing screaming. Keep feeding invoices, keep recipes costed, and don’t let suppliers mug you quietly.";
+  })();
+
   return (
     <div style={styles.pageWrapper}>
       <div style={styles.pageHeader}>
         <h1 style={styles.pageTitle}>Main Hideout</h1>
-        <p style={styles.pageSubtitle}>The kitchen numbers board. If money is bleeding, GP Police calls it out.</p>
+        <p style={styles.pageSubtitle}>One stop shop. Snap invoices, cost plates, check stock, and see if GP is getting mugged before service starts.</p>
+      </div>
+
+      <div style={commandBarStyle}>
+        <button type="button" style={commandBarItemStyle} onClick={openInvoiceFolder}>
+          <div style={styles.infoCardTitle}>💰 Invoice Spend</div>
+          <div style={styles.infoCardText}>{formatMoney(thisWeekInvoiceSpend)}</div>
+          <div style={styles.infoCardSubtext}>This week’s evidence pile.</div>
+        </button>
+        <button type="button" style={commandBarItemStyle} onClick={() => props.handleSidebarNavigation?.("menu")}>
+          <div style={styles.infoCardTitle}>💀 GP Damage</div>
+          <div style={styles.infoCardText}>{formatMoney(gpDamageThisWeek)}</div>
+          <div style={styles.infoCardSubtext}>Margin getting punched.</div>
+        </button>
+        <button type="button" style={commandBarItemStyle} onClick={() => props.handleSidebarNavigation?.("recipes")}>
+          <div style={styles.infoCardTitle}>⚠️ Problems</div>
+          <div style={styles.infoCardText}>{dashboardProblemCount}</div>
+          <div style={styles.infoCardSubtext}>Fix before you trust it.</div>
+        </button>
+        <button type="button" style={commandBarItemStyle} onClick={openStockHub}>
+          <div style={styles.infoCardTitle}>📦 Stock Warnings</div>
+          <div style={styles.infoCardText}>{stockWarningCount}</div>
+          <div style={styles.infoCardSubtext}>Reality check the walk-in.</div>
+        </button>
+      </div>
+
+      <div style={smartAlertStyle}>
+        <div style={styles.dashboardSectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>🚔 Today’s GP Call-Out</h2>
+            <p style={styles.sectionSubtitle}>{smartAlertText}</p>
+          </div>
+          <button type="button" style={styles.primaryButton} onClick={openInvoiceCamera}>📷 Snap Invoice Now</button>
+        </div>
+        <div style={fastActionGridStyle}>
+          <button type="button" style={styles.secondaryButton} onClick={openInvoiceCamera}>📸 Invoice</button>
+          <button type="button" style={styles.secondaryButton} onClick={openRecipeSearch}>🔎 Recipe Search</button>
+          <button type="button" style={styles.secondaryButton} onClick={() => props.startNewRecipe?.("final dish")}>➕ Create Recipe</button>
+          <button type="button" style={styles.secondaryButton} onClick={openStocktake}>📦 Stocktake</button>
+          <button type="button" style={styles.secondaryButton} onClick={() => props.handleSidebarNavigation?.("menu")}>💀 Damage</button>
+        </div>
+      </div>
+
+      <div style={{ ...styles.mainHideoutHeroPanel, minHeight: isMobileViewport ? 420 : 360 }}>
+        <div style={{ ...styles.mainHideoutHeroOverlay, minHeight: isMobileViewport ? 420 : 360 }}>
+          <div style={{ display: "grid", gap: 14, width: "100%" }}>
+            <div style={styles.mainHideoutHeroBadge}>GP POLICE COMMAND CENTRE</div>
+            <h2 style={styles.mainHideoutHeroTitle}>Because guessing costs money.</h2>
+            <p style={styles.mainHideoutHeroSubtext}>Invoices are evidence. Recipes are suspects. Stocktake tells you what walked out the back door. If GP Police can’t cost thin air, it’ll tell you where the hole is.</p>
+            <div style={dashboardCommandGridStyle}>
+              <button type="button" style={{ ...commandButtonStyle, border: "1px solid rgba(59, 130, 246, 0.48)" }} onClick={openInvoiceCamera}>
+                <div style={commandButtonTitleStyle}>📸 Snap Invoice</div>
+                <div style={styles.infoCardSubtext}>Camera first. Upload the bill, fix the ugly rows, lock the evidence.</div>
+              </button>
+              <button type="button" style={commandButtonStyle} onClick={props.startNewRecipe}>
+                <div style={commandButtonTitleStyle}>🍽️ Cost A Plate</div>
+                <div style={styles.infoCardSubtext}>Create a recipe. GP Police can’t cost thin air, mate.</div>
+              </button>
+              <button type="button" style={commandButtonStyle} onClick={openRecipeSearch}>
+                <div style={commandButtonTitleStyle}>🔎 Search Recipes</div>
+                <div style={styles.infoCardSubtext}>Find a dish, check the damage, fix the sell price before it bites.</div>
+              </button>
+              <button type="button" style={commandButtonStyle} onClick={props.startNewSupplierLine}>
+                <div style={commandButtonTitleStyle}>➕ Add Supplier Line</div>
+                <div style={styles.infoCardSubtext}>No ingredient, no costing. Put something here or GP Police will complain.</div>
+              </button>
+              <button type="button" style={commandButtonStyle} onClick={openStocktake}>
+                <div style={commandButtonTitleStyle}>📦 Stocktake</div>
+                <div style={styles.infoCardSubtext}>Count the shelves. Stop pretending the walk-in tells the truth.</div>
+              </button>
+              <button type="button" style={commandButtonStyle} onClick={openStockHub}>
+                <div style={commandButtonTitleStyle}>🚨 Stock Damage</div>
+                <div style={styles.infoCardSubtext}>Invoices in, recipes out, stocktake checks the lie. This is where leaks show up.</div>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div style={commandCardStyle}>
@@ -167,15 +326,15 @@ export function Dashboard(props: any) {
       <div style={{ ...styles.card, ...proofToneStyle }}>
         <div style={styles.dashboardSectionHeader}>
           <div>
-            <h2 style={styles.sectionTitle}>🧾 Prove It Board</h2>
-            <p style={styles.sectionSubtitle}>Shows if the app has enough evidence to call the damage properly.</p>
+            <h2 style={styles.sectionTitle}>🧾 Evidence Locker</h2>
+            <p style={styles.sectionSubtitle}>Shows whether GP Police has enough proof to call the damage, not guess it.</p>
           </div>
           <div style={styles.infoCardSubtext}>{String(proofEngine.confidence || "low").toUpperCase()} confidence</div>
         </div>
         <div style={styles.infoGrid}>
           <div style={styles.infoCard}>
             <div style={styles.infoCardTitle}>{proofEngine.headline || "Needs real kitchen evidence"}</div>
-            <div style={styles.infoCardSubtext}>{proofEngine.trustMessage || "Lock invoices and load POS so GP Police can stop guessing."}</div>
+            <div style={styles.infoCardSubtext}>{proofEngine.trustMessage || "Lock invoices and load POS so GP Police stops guessing and starts arresting leaks."}</div>
           </div>
           <div style={styles.infoCard}>
             <div style={styles.infoCardTitle}>Damage Trend</div>
@@ -194,7 +353,7 @@ export function Dashboard(props: any) {
         <div style={styles.dashboardSectionHeader}>
           <div>
             <h2 style={styles.sectionTitle}>✅ Money You Stopped Bleeding</h2>
-            <p style={styles.sectionSubtitle}>Proof that the app is finding leaks and helping you shut them down.</p>
+            <p style={styles.sectionSubtitle}>Wins board. Supplier damage found, margin leaks plugged, chef stress lowered.</p>
           </div>
         </div>
         <div style={styles.infoGrid}>
@@ -212,14 +371,38 @@ export function Dashboard(props: any) {
         <div style={styles.dashboardSectionHeader}>
           <div>
             <h2 style={styles.sectionTitle}>📸 Invoice Drive-By</h2>
-            <p style={styles.sectionSubtitle}>Snap it, fix the ugly rows, lock it. No five-click circus.</p>
+            <p style={styles.sectionSubtitle}>Snap it, fix the ugly rows, lock it. No spreadsheet therapy.</p>
           </div>
         </div>
 
         <div style={mobileButtonGridStyle}>
           <button type="button" style={styles.primaryButton} onClick={openInvoiceCamera}>📷 Snap Invoice</button>
-          <button type="button" style={styles.secondaryButton} onClick={openInvoiceReview}>Fix Invoice Mess</button>
-          <button type="button" style={styles.secondaryButton} onClick={() => props.handleSidebarNavigation?.("invoice")}>Invoice Damage Folder</button>
+          <button type="button" style={styles.secondaryButton} onClick={openInvoiceReview}>Fix The Mess</button>
+          <button type="button" style={styles.secondaryButton} onClick={openInvoiceFolder}>Damage Folder</button>
+        </div>
+      </div>
+
+      <div style={{ ...styles.card, border: "1px solid rgba(251, 191, 36, 0.30)", background: "rgba(120, 53, 15, 0.16)" }}>
+        <div style={styles.dashboardSectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>📦 How Stocktake Ties The Whole Thing Together</h2>
+            <p style={styles.sectionSubtitle}>Invoices say what should be there. Recipes say what should have gone out. Stocktake shows what is actually sitting on the shelf.</p>
+          </div>
+          <button type="button" style={styles.secondaryButton} onClick={openStocktake}>Open Stocktake</button>
+        </div>
+        <div style={styles.infoGrid}>
+          <div style={styles.infoCard}>
+            <div style={styles.infoCardTitle}>1. Invoices In</div>
+            <div style={styles.infoCardSubtext}>Supplier bills load stock and real prices. No invoice, no evidence.</div>
+          </div>
+          <div style={styles.infoCard}>
+            <div style={styles.infoCardTitle}>2. Recipes Out</div>
+            <div style={styles.infoCardSubtext}>Recipes tell GP Police what should be used when food sells.</div>
+          </div>
+          <div style={styles.infoCard}>
+            <div style={styles.infoCardTitle}>3. Stocktake Checks The Lie</div>
+            <div style={styles.infoCardSubtext}>Difference equals waste, theft, over-ordering, bad counts, or someone being cheeky.</div>
+          </div>
         </div>
       </div>
 
@@ -227,27 +410,27 @@ export function Dashboard(props: any) {
         <button type="button" style={styles.metricCard} onClick={() => props.handleSidebarNavigation?.("invoice")}>
           <div style={styles.metricLabel}>Invoice Evidence</div>
           <div style={styles.metricValue}>{formatMoney(totalInvoiceSpend)}</div>
-          <div style={smallMutedTextStyle}>Snap. Fix. Lock. Catch the damage.</div>
+          <div style={smallMutedTextStyle}>Snap. Fix. Lock. Catch the robbery.</div>
         </button>
         <button type="button" style={styles.metricCard} onClick={() => props.handleSidebarNavigation?.("recipes")}>
           <div style={styles.metricLabel}>Plates Under Watch</div>
           <div style={styles.metricValue}>{finalDishes.length}</div>
-          <div style={smallMutedTextStyle}>Menu items GP Police is watching.</div>
+          <div style={smallMutedTextStyle}>Menu items sitting under GP surveillance.</div>
         </button>
         <button type="button" style={styles.metricCard} onClick={() => props.handleSidebarNavigation?.("ingredients")}>
           <div style={styles.metricLabel}>Supplier Lines</div>
           <div style={styles.metricValue}>{ingredients.length}</div>
-          <div style={smallMutedTextStyle}>The stuff suppliers keep moving on you.</div>
+          <div style={smallMutedTextStyle}>The stuff suppliers keep shifting while nobody is looking.</div>
         </button>
       </div>
 
       <div style={styles.card}>
         <div style={styles.dashboardSectionHeader}>
           <div>
-            <h2 style={styles.sectionTitle}>💀 Where You’re Bleeding Money</h2>
-            <p style={styles.sectionSubtitle}>Damage called from locked invoice evidence.</p>
+            <h2 style={styles.sectionTitle}>💀 Where The Money Is Bleeding</h2>
+            <p style={styles.sectionSubtitle}>No vibes. Just damage called from locked invoice evidence.</p>
           </div>
-          <button type="button" style={styles.secondaryButton} onClick={() => props.handleSidebarNavigation?.("menu")}>Show Me The Damage</button>
+          <button type="button" style={styles.secondaryButton} onClick={() => props.handleSidebarNavigation?.("menu")}>Show The Damage</button>
         </div>
         <div style={styles.infoGrid}>
           <div style={styles.infoCard}>
@@ -273,9 +456,9 @@ export function Dashboard(props: any) {
         <div style={styles.dashboardSectionHeader}>
           <div>
             <h2 style={styles.sectionTitle}>🍽️ Menu Damage Scanner</h2>
-            <p style={styles.sectionSubtitle}>Turns supplier price hikes into plate-level damage. No more guessing.</p>
+            <p style={styles.sectionSubtitle}>Turns supplier price hikes into plate-level damage. No more chef maths in the dark.</p>
           </div>
-          <button type="button" style={styles.secondaryButton} onClick={() => props.handleSidebarNavigation?.("menu")}>Show Me The Damage</button>
+          <button type="button" style={styles.secondaryButton} onClick={() => props.handleSidebarNavigation?.("menu")}>Show The Damage</button>
         </div>
 
         <div style={styles.infoGrid}>
@@ -364,6 +547,38 @@ export function Dashboard(props: any) {
             ))}
           </div>
         )}
+      </div>
+
+      <div style={styles.card}>
+        <div style={styles.dashboardSectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>🔎 Recipe Command Desk</h2>
+            <p style={styles.sectionSubtitle}>Search, build, or fix recipes without digging. GP Police can’t cost thin air.</p>
+          </div>
+          <button type="button" style={styles.primaryButton} onClick={() => props.startNewRecipe?.("final dish")}>Create Recipe</button>
+        </div>
+        <div style={styles.infoGrid}>
+          <button type="button" style={styles.infoCard} onClick={openRecipeSearch}>
+            <div style={styles.infoCardTitle}>Search Recipes</div>
+            <div style={styles.infoCardSubtext}>Find the dish before the margin finds you.</div>
+          </button>
+          <button type="button" style={styles.infoCard} onClick={() => props.handleSidebarNavigation?.("recipes")}>
+            <div style={styles.infoCardTitle}>Problem Recipes</div>
+            <div style={styles.infoCardText}>{recipeIssueCount}</div>
+            <div style={styles.infoCardSubtext}>Missing guts, prices, or costing evidence.</div>
+          </button>
+          {latestRecipes.length > 0 ? latestRecipes.map((recipe: any) => (
+            <button key={recipe.id || recipe.name} type="button" style={styles.infoCard} onClick={openRecipeSearch}>
+              <div style={styles.infoCardTitle}>{recipe.name || "Unnamed recipe"}</div>
+              <div style={styles.infoCardSubtext}>Recent plate under watch.</div>
+            </button>
+          )) : (
+            <div style={styles.infoCard}>
+              <div style={styles.infoCardTitle}>No dishes yet</div>
+              <div style={styles.infoCardSubtext}>Put something here. GP Police can’t cost thin air.</div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div style={styles.card}>
