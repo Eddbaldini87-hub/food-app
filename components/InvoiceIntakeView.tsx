@@ -6,6 +6,7 @@ import { InvoiceAccuracyLabPanel } from "./invoice/InvoiceAccuracyLabPanel";
 import { InvoiceLockHistoryPanel } from "./invoice/InvoiceLockHistoryPanel";
 import { InvoicePreflightPanel } from "./invoice/InvoicePreflightPanel";
 import { InvoiceReviewToolbar } from "./invoice/InvoiceReviewToolbar";
+import { InvoiceReviewActionPanel } from "./invoice/InvoiceReviewActionPanel";
 
 export function InvoiceIntakeView(props: any) {
   const {
@@ -1984,52 +1985,7 @@ export function InvoiceIntakeView(props: any) {
                 <InvoiceAccuracyLabPanel {...invoiceComponentProps} />
                 <InvoiceLockHistoryPanel {...invoiceComponentProps} />
 
-                <div style={getInvoiceReviewActionPanelStyle()}>
-                  <div style={styles.sectionGroupHeaderRow}>
-                    <div>
-                      <h3 style={styles.sectionGroupTitle}>{invoiceReviewActionPlan.headline}</h3>
-                      <div style={styles.infoCardSubtext}>{invoiceReviewActionPlan.helper}</div>
-                    </div>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                      <span style={getInvoiceReviewBadgeStyle({ cogsType: invoiceCanLockSafely ? "food_cogs" : "unknown" })}>
-                        {invoiceReviewActionPlan.progressPercent}% READY
-                      </span>
-                      <span style={styles.statusBadge}>
-                        {invoiceReviewActionPlan.selectedRows} SELECTED
-                      </span>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))", gap: 10, marginTop: 12 }}>
-                    <div style={styles.infoCard}>
-                      <strong>{invoiceReviewActionPlan.totalRows}</strong>
-                      <div style={styles.infoCardSubtext}>Rows detected</div>
-                    </div>
-                    <div style={styles.infoCard}>
-                      <strong>{invoiceReviewActionPlan.readyRows}</strong>
-                      <div style={styles.infoCardSubtext}>Ready rows</div>
-                    </div>
-                    <div style={styles.infoCard}>
-                      <strong>{invoiceReviewActionPlan.needsFixRows}</strong>
-                      <div style={styles.infoCardSubtext}>Need fixing</div>
-                    </div>
-                  </div>
-
-                  <div style={{ ...styles.buttonRow, marginTop: 14 }}>
-                    <button type="button" style={invoiceCanLockSafely ? styles.primaryButton : styles.secondaryButton} onClick={handleInvoiceReviewPrimaryAction}>
-                      {invoiceCanLockSafely ? "🚔 Lock clean invoice" : "🔎 Fix next problem"}
-                    </button>
-                    <button type="button" style={styles.secondaryButton} onClick={showOnlyInvoiceRowsNeedingFix}>
-                      Show fix-only lane
-                    </button>
-                    <button type="button" style={styles.secondaryButton} onClick={autoApproveHighConfidenceInvoiceRows}>
-                      Auto-select clean rows
-                    </button>
-                    <button type="button" style={styles.secondaryButton} onClick={handleRefreshInvoiceIntelligence}>
-                      Re-check matching
-                    </button>
-                  </div>
-                </div>
+                <InvoiceReviewActionPanel {...invoiceComponentProps} />
 
                 <InvoicePreflightPanel {...invoiceComponentProps} />
                 <InvoiceReviewToolbar {...invoiceComponentProps} />
