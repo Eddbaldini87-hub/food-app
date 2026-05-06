@@ -145,16 +145,84 @@ export function Dashboard(props: any) {
       ? { border: "1px solid rgba(245, 158, 11, 0.42)", background: "rgba(245, 158, 11, 0.10)" }
       : { border: "1px solid rgba(148, 163, 184, 0.26)", background: "rgba(15, 23, 42, 0.55)" };
 
+  const openRecipeSearch = () => {
+    props.handleSidebarNavigation?.("recipes");
+  };
+
+  const openStocktake = () => {
+    props.handleSidebarNavigation?.("stocktake");
+  };
+
+  const openStockHub = () => {
+    props.handleSidebarNavigation?.("stock");
+  };
+
+  const openInvoiceFolder = () => {
+    props.handleSidebarNavigation?.("invoice");
+  };
+
+  const dashboardCommandGridStyle = {
+    display: "grid",
+    gridTemplateColumns: isMobileViewport ? "1fr" : "repeat(3, minmax(0, 1fr))",
+    gap: 12,
+    marginTop: 16,
+  };
+
+  const commandButtonStyle = {
+    ...styles.infoCard,
+    textAlign: "left" as const,
+    cursor: "pointer",
+    minHeight: isMobileViewport ? 92 : 116,
+    border: "1px solid rgba(251, 191, 36, 0.24)",
+    background: "linear-gradient(135deg, rgba(251, 191, 36, 0.10), rgba(15, 23, 42, 0.78))",
+  };
+
+  const commandButtonTitleStyle = {
+    ...styles.infoCardTitle,
+    fontSize: isMobileViewport ? 16 : 18,
+  };
+
   return (
     <div style={styles.pageWrapper}>
       <div style={styles.pageHeader}>
         <h1 style={styles.pageTitle}>Main Hideout</h1>
-        <p style={styles.pageSubtitle}>Cook food. Don’t cook the books. GP Police sniffs out the margin leaks before they mug your menu.</p>
+        <p style={styles.pageSubtitle}>One stop shop. Snap invoices, cost plates, check stock, and see if GP is getting mugged before service starts.</p>
       </div>
 
-      <div style={{ ...styles.infoCard, border: "1px solid rgba(251, 191, 36, 0.32)", background: "linear-gradient(135deg, rgba(251, 191, 36, 0.12), rgba(15, 23, 42, 0.72))" }}>
-        <div style={styles.infoCardTitle}>🚔 GP Police is on shift</div>
-        <div style={styles.infoCardSubtext}>Invoices are evidence. Recipes are suspects. Suppliers don’t get to rob the GP in peace.</div>
+      <div style={{ ...styles.mainHideoutHeroPanel, minHeight: isMobileViewport ? 420 : 360 }}>
+        <div style={{ ...styles.mainHideoutHeroOverlay, minHeight: isMobileViewport ? 420 : 360 }}>
+          <div style={{ display: "grid", gap: 14, width: "100%" }}>
+            <div style={styles.mainHideoutHeroBadge}>GP POLICE COMMAND CENTRE</div>
+            <h2 style={styles.mainHideoutHeroTitle}>Because guessing costs money.</h2>
+            <p style={styles.mainHideoutHeroSubtext}>Invoices are evidence. Recipes are suspects. Stocktake tells you what walked out the back door. If GP Police can’t cost thin air, it’ll tell you where the hole is.</p>
+            <div style={dashboardCommandGridStyle}>
+              <button type="button" style={{ ...commandButtonStyle, border: "1px solid rgba(59, 130, 246, 0.48)" }} onClick={openInvoiceCamera}>
+                <div style={commandButtonTitleStyle}>📸 Snap Invoice</div>
+                <div style={styles.infoCardSubtext}>Camera first. Upload the bill, fix the ugly rows, lock the evidence.</div>
+              </button>
+              <button type="button" style={commandButtonStyle} onClick={props.startNewRecipe}>
+                <div style={commandButtonTitleStyle}>🍽️ Cost A Plate</div>
+                <div style={styles.infoCardSubtext}>Create a recipe. GP Police can’t cost thin air, mate.</div>
+              </button>
+              <button type="button" style={commandButtonStyle} onClick={openRecipeSearch}>
+                <div style={commandButtonTitleStyle}>🔎 Search Recipes</div>
+                <div style={styles.infoCardSubtext}>Find a dish, check the damage, fix the sell price before it bites.</div>
+              </button>
+              <button type="button" style={commandButtonStyle} onClick={props.startNewSupplierLine}>
+                <div style={commandButtonTitleStyle}>➕ Add Supplier Line</div>
+                <div style={styles.infoCardSubtext}>No ingredient, no costing. Put something here or GP Police will complain.</div>
+              </button>
+              <button type="button" style={commandButtonStyle} onClick={openStocktake}>
+                <div style={commandButtonTitleStyle}>📦 Stocktake</div>
+                <div style={styles.infoCardSubtext}>Count the shelves. Stop pretending the walk-in tells the truth.</div>
+              </button>
+              <button type="button" style={commandButtonStyle} onClick={openStockHub}>
+                <div style={commandButtonTitleStyle}>🚨 Stock Damage</div>
+                <div style={styles.infoCardSubtext}>Invoices in, recipes out, stocktake checks the lie. This is where leaks show up.</div>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div style={commandCardStyle}>
@@ -224,7 +292,7 @@ export function Dashboard(props: any) {
         <div style={mobileButtonGridStyle}>
           <button type="button" style={styles.primaryButton} onClick={openInvoiceCamera}>📷 Snap Invoice</button>
           <button type="button" style={styles.secondaryButton} onClick={openInvoiceReview}>Fix The Mess</button>
-          <button type="button" style={styles.secondaryButton} onClick={() => props.handleSidebarNavigation?.("invoice")}>Damage Folder</button>
+          <button type="button" style={styles.secondaryButton} onClick={openInvoiceFolder}>Damage Folder</button>
         </div>
       </div>
 

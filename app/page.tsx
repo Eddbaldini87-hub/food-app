@@ -1307,6 +1307,7 @@ export default function Page() {
       renderActiveView={renderActiveView}
       startNewRecipe={startNewRecipe}
       startNewSupplierLine={startNewSupplierLine}
+      handleOpenInvoiceCamera={handleOpenInvoiceCamera}
     />
   );
 }

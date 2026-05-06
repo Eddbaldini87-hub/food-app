@@ -26,6 +26,7 @@ export function AppShell(props: any) {
     renderActiveView,
     startNewRecipe,
     startNewSupplierLine,
+    handleOpenInvoiceCamera,
   } = props;
 
   const renderGpLogoFrame = (size = 86, borderRadius = 22) => (
@@ -129,12 +130,32 @@ export function AppShell(props: any) {
           <button
             type="button"
             style={{
+              ...styles.secondaryButton,
+              ...styles.mobileActionButton,
+            }}
+            onClick={() => onNavigate("dashboard")}
+          >
+            Main Hideout
+          </button>
+          <button
+            type="button"
+            style={{
               ...styles.primaryButton,
+              ...styles.mobileActionButton,
+            }}
+            onClick={handleOpenInvoiceCamera}
+          >
+            Snap Invoice
+          </button>
+          <button
+            type="button"
+            style={{
+              ...styles.secondaryButton,
               ...styles.mobileActionButton,
             }}
             onClick={startNewRecipe}
           >
-            Cost A Plate
+            Cost Plate
           </button>
           <button
             type="button"
@@ -144,7 +165,7 @@ export function AppShell(props: any) {
             }}
             onClick={startNewSupplierLine}
           >
-            Add Supplier Line
+            Add Line
           </button>
         </div>
       ) : null}

@@ -394,7 +394,7 @@ export const styles: Record<string, CSSProperties> = {
     marginLeft: 0,
   },
   mainContentMobile: {
-    padding: "16px 16px 112px",
+    padding: "16px 16px 170px",
     width: "100%",
     maxWidth: "100%",
     minWidth: 0,
@@ -413,7 +413,7 @@ export const styles: Record<string, CSSProperties> = {
     width: "100%",
     maxWidth: "100%",
     boxSizing: "border-box",
-    paddingBottom: 120,
+    paddingBottom: 180,
   },
   pageHeader: {
     display: "flex",
@@ -1513,8 +1513,8 @@ export const styles: Record<string, CSSProperties> = {
   },
   mobileHeroButton: {
     width: "100%",
-    minHeight: 48,
-    fontSize: 15,
+    minHeight: 46,
+    fontSize: 13,
     fontWeight: 800,
   },
   dashboardHeroAside: {
@@ -1680,7 +1680,7 @@ export const styles: Record<string, CSSProperties> = {
     zIndex: 45,
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
-    gap: 12,
+    gap: 10,
     padding: "12px 16px calc(12px + env(safe-area-inset-bottom, 0px))",
     background: "rgba(15,23,42,0.96)",
     borderTop: "1px solid rgba(148,163,184,0.18)",
@@ -1707,8 +1707,8 @@ export const styles: Record<string, CSSProperties> = {
   },
   mobileActionButton: {
     width: "100%",
-    minHeight: 48,
-    fontSize: 15,
+    minHeight: 46,
+    fontSize: 13,
     fontWeight: 800,
     justifyContent: "center",
   },
