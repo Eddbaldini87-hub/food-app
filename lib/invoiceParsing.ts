@@ -10,6 +10,10 @@ export function cleanInvoiceOcrText(text: string): string {
     .replace(/[×✕]/g, "x")
     .replace(/\u00a0/g, " ")
     .replace(/[|¦]/g, " ")
+    .replace(/[•·]/g, " ")
+    .replace(/QTY\s*\/\s*ORD/gi, "Qty Ordered")
+    .replace(/U\s*\/\s*PRICE/gi, "Unit Price")
+    .replace(/EX\s*GST/gi, "Ex GST")
     .replace(/[$＄]\s+/g, "$ ")
     .replace(/(\d),(\d{2})\b/g, "$1.$2")
     .replace(/(\d)\s+\.\s+(\d{1,2})\b/g, "$1.$2")
@@ -112,31 +116,24 @@ export type SmartInvoiceTextRow = {
 };
 
 export function splitTextIntoRowsByPrice(text: string): SmartInvoiceTextRow[] {
-  const tokens = String(text || "")
+  const normalizedText = cleanInvoiceOcrText(String(text || ""))
     .replace(/\$/g, " $ ")
     .replace(/\s+/g, " ")
-    .trim()
-    .split(" ")
-    .filter(Boolean);
+    .trim();
 
+  if (!normalizedText) return [];
+
+  const tokens = normalizedText.split(" ").filter(Boolean);
   const rows: SmartInvoiceTextRow[] = [];
   let currentTokens: string[] = [];
-  const pricePattern = /^\$?\d+\.\d{2}$/;
-  const unitPattern = /^(kg|kgs|g|gm|gram|grams|l|lt|ltr|litre|litres|ml|ea|each|box|ctn|carton|bag|bunch|bun|pkt|pack|pc|pcs|unit|units)$/i;
+  const pricePattern = /^\$?\d{1,6}\.\d{2}$/;
+  const unitPattern = /^(kg|kgs|g|gm|gram|grams|l|lt|ltr|litre|litres|ml|ea|each|box|ctn|carton|bag|bunch|bun|pkt|pack|pc|pcs|unit|units|tray|tub|tin|bottle|case)$/i;
   const quantityPattern = /^\d+(?:\.\d+)?$/;
+  const codePattern = /^([A-Z]{1,4}\d{1,5}|\d{4,}|B\d{2}|BEF?|P\d{2}|L\d{2})$/i;
 
-  tokens.forEach((token) => {
-    const cleanedToken = token.replace(/^[^0-9$]+|[^0-9.]+$/g, "");
-    const priceToken = pricePattern.test(cleanedToken) ? cleanedToken.replace("$", "") : "";
-
-    if (!priceToken) {
-      currentTokens.push(token);
-      return;
-    }
-
+  const pushCurrentRow = (priceToken: string) => {
     const rowTokens = currentTokens.slice();
     currentTokens = [];
-
     if (!rowTokens.length) return;
 
     let quantity = "";
@@ -155,13 +152,28 @@ export function splitTextIntoRowsByPrice(text: string): SmartInvoiceTextRow[] {
       }
     }
 
-    const nameTokens = quantityIndex >= 0 ? rowTokens.slice(0, quantityIndex) : rowTokens;
-    const name = nameTokens.join(" ").replace(/\s+/g, " ").trim();
+    let nameTokens = quantityIndex >= 0 ? rowTokens.slice(0, quantityIndex) : rowTokens;
+    if (nameTokens.length > 1 && codePattern.test(nameTokens[0])) {
+      nameTokens = nameTokens.slice(1);
+    }
 
-    if (!name) return;
+    const name = smartCleanIngredientName(nameTokens.join(" ").replace(/\s+/g, " ").trim());
+    if (!hasUsableInvoiceName(name)) return;
 
     const raw = [name, quantity, unit, priceToken].filter(Boolean).join(" ");
     rows.push({ name, quantity, unit, price: priceToken, raw });
+  };
+
+  tokens.forEach((token) => {
+    const cleanedToken = token.replace(/^[^0-9$]+|[^0-9.]+$/g, "");
+    const priceToken = pricePattern.test(cleanedToken) ? cleanedToken.replace("$", "") : "";
+
+    if (!priceToken) {
+      currentTokens.push(token);
+      return;
+    }
+
+    pushCurrentRow(priceToken);
   });
 
   return rows;
@@ -229,15 +241,23 @@ export function splitInvoiceLineByPriceAnchors(line: string) {
   if (!source) return [];
 
   const moneyMatches = getInvoiceMoneyMatches(source);
-  if (moneyMatches.length <= 1) return [source];
+  const repeatedUnits = (source.match(/\b(carton|ctn|box|case|pack|pk|kg|g|l|ml|each|ea|bag|bunch|tray|tub|tin|bottle)\b/gi) || []).length;
+  const wordCount = source.split(/\s+/).filter(Boolean).length;
+
+  if (moneyMatches.length <= 1 && !(wordCount >= 24 && repeatedUnits >= 2)) return [source];
 
   const segments: string[] = [];
   let cursor = 0;
 
-  moneyMatches.forEach((match) => {
+  moneyMatches.forEach((match, matchIndex) => {
     const endIndex = match.index + String(match.raw || "").length;
-    const segment = source.slice(cursor, endIndex).replace(/\s+/g, " ").trim();
-    if (segment && /[a-zA-Z]/.test(segment)) {
+    let segment = source.slice(cursor, endIndex).replace(/\s+/g, " ").trim();
+
+    if (matchIndex > 0) {
+      segment = segment.replace(/^\s*(?:total|gst|ex\s*gst|inc\s*gst)\s*/i, "").trim();
+    }
+
+    if (segment && /[a-zA-Z]/.test(segment) && !isInvoiceDocumentNoiseLine(segment)) {
       segments.push(segment);
     }
     cursor = endIndex;
@@ -245,8 +265,13 @@ export function splitInvoiceLineByPriceAnchors(line: string) {
 
   const tail = source.slice(cursor).replace(/\s+/g, " ").trim();
   if (tail && segments.length) {
-    const last = segments.pop() || "";
-    segments.push(`${last} ${tail}`.replace(/\s+/g, " ").trim());
+    const tailLooksLikeNextProduct = /\b[A-Z]{1,4}\d{1,5}\b\s+[A-Za-z]/.test(tail) || (hasInvoiceMoneyValue(tail) && /[a-zA-Z]/.test(tail));
+    if (tailLooksLikeNextProduct) {
+      segments.push(tail);
+    } else {
+      const last = segments.pop() || "";
+      segments.push(`${last} ${tail}`.replace(/\s+/g, " ").trim());
+    }
   }
 
   return segments.length > 1 ? segments : [source];
@@ -328,6 +353,8 @@ export function detectInvoiceRowShape(rowOrLine: any): InvoiceRowShapeResult {
 export function getInvoiceRowParserScoreContribution(row: any) {
   const shape = detectInvoiceRowShape(row);
   const cogsType = normalizeLegacyInvoiceCogsType(row?.cogsType || row?.cogsCategory);
+  const categorySearchText = normalizeIngredientName([row?.name, row?.description, row?.rawLine, row?.categoryReason, row?.cogsCategoryReason].filter(Boolean).join(" "));
+  const hasCategoryKeyword = /\b(beef|chicken|pork|lamb|fish|prawn|cheese|milk|cream|butter|egg|flour|rice|pasta|tomato|potato|onion|garlic|lettuce|napkin|glove|foil|cling|container|lid|chemical|detergent|cleaner|bag|straw|cup)\b/.test(categorySearchText);
   const hasPrice = safeNumber(row?.lineTotal ?? row?.total ?? row?.amount ?? row?.purchasePrice ?? row?.unitPrice) > 0;
   const hasName = hasUsableInvoiceName(String(row?.name || row?.description || row?.rawLine || ""));
   const hasUnit = Boolean(String(row?.unit || row?.purchaseUnit || "").trim());
@@ -357,11 +384,16 @@ export function getInvoiceRowParserScoreContribution(row: any) {
   }
 
   if (cogsType !== "unknown") {
-    score += 8;
-    reasons.push("+8 category found");
+    score += 10;
+    reasons.push("+10 category found");
   } else {
-    score -= 8;
-    reasons.push("-8 unknown category");
+    score -= 14;
+    reasons.push("-14 unknown category");
+  }
+
+  if (hasCategoryKeyword) {
+    score += 5;
+    reasons.push("+5 useful category keyword");
   }
 
   if (shape.rowShapeConfidence === "high") {
@@ -437,7 +469,7 @@ export function scoreInvoiceParserCandidate(rows: any[], candidateName = "Parser
   );
 
   stats.score += stats.rowCount * 5 + stats.rowsWithPrice * 7 + stats.rowsWithValidUnit * 4 + stats.rowsWithCategory * 4;
-  stats.score -= stats.unknownRows * 7 + stats.lowConfidenceRows * 4 + stats.suspectedMergedRows * 14 + stats.missingPriceRows * 10;
+  stats.score -= stats.unknownRows * 10 + stats.lowConfidenceRows * 5 + stats.suspectedMergedRows * 18 + stats.missingPriceRows * 14;
 
   return stats;
 }
@@ -921,8 +953,11 @@ export function smartCleanIngredientName(name: string) {
   });
 
   cleaned = cleaned
-    .replace(/\b(kg|kgs|g|gm|ml|l|ltr|lt|each|ea|pkt|ctn|carton|box|case|pack|pk|bag|tray|tub|tin)\b/g, " ")
-    .replace(/\b(fresh|frozen|whole|sliced|diced|chopped|premium|choice|grade|brand|approx|bulbs)\b/g, " ")
+    .replace(/\b\d+(?:\.\d+)?\s*(?:x|kg|kgs|g|gm|ml|l|ltr|lt|each|ea|pkt|ctn|carton|box|case|pack|pk|bag|tray|tub|tin|bottle|jar|inner|outer)\b/g, " ")
+    .replace(/\b(?:ord|del|supply|supplied|unit|price|total|gst|ex|inc|net|gross|code|product|description)\b/g, " ")
+    .replace(/\b(kg|kgs|g|gm|ml|l|ltr|lt|each|ea|pkt|ctn|carton|box|case|pack|pk|bag|tray|tub|tin|bottle|jar|inner|outer)\b/g, " ")
+    .replace(/\b(fresh|frozen|chilled|whole|sliced|diced|chopped|peeled|premium|choice|grade|brand|approx|bulbs|loose|bulk)\b/g, " ")
+    .replace(/\b[a-z]{0,3}\d+[a-z0-9-]*\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -1216,10 +1251,17 @@ export function findInvoiceIngredientMatch(row: any, supplierIngredients: any[],
 
 export function getInvoiceRowConfidence(row: any, matchedIngredient: any) {
   const matchConfidence = String(row?.matchConfidence || "").toLowerCase();
-  if (matchedIngredient && matchConfidence === "high" && safeNumber(row?.lineTotal) > 0 && String(row?.name || "").trim()) return "high";
-  if (matchedIngredient && safeNumber(row?.lineTotal) > 0 && String(row?.name || "").trim()) return "medium";
-  if (String(row?.name || "").trim() && safeNumber(row?.lineTotal) > 0) return "medium";
-  return "low";
+  const cogsType = normalizeLegacyInvoiceCogsType(row?.cogsType || row?.cogsCategory);
+  const shape = detectInvoiceRowShape(row);
+  const hasName = hasUsableInvoiceName(String(row?.name || row?.description || row?.rawLine || ""));
+  const hasPrice = safeNumber(row?.lineTotal ?? row?.total ?? row?.amount ?? row?.purchasePrice ?? row?.unitPrice) > 0;
+
+  if (!hasName || !hasPrice || shape.suspectedMergedRow) return "low";
+  if (cogsType === "unknown") return matchedIngredient ? "medium" : "low";
+  if (matchedIngredient && (matchConfidence === "high" || matchConfidence === "learned") && shape.rowShapeConfidence !== "low") return "high";
+  if (matchedIngredient && hasPrice) return "medium";
+  if (cogsType === "consumable_cogs" || cogsType === "non_cogs") return shape.rowShapeConfidence === "high" ? "high" : "medium";
+  return "medium";
 }
 
 export function enhanceInvoiceReviewRows(rows: any[], supplierIngredients: any[], supplierName: string) {

@@ -3,7 +3,8 @@ export function normalizeInvoiceIngredientMatchText(value: any) {
     .toLowerCase()
     .replace(/\$?\d+(?:\.\d{2})?/g, " ")
     .replace(/\b\d+(?:\.\d+)?\s*(?:x|kg|kgs|g|gm|gram|grams|l|lt|ltr|litre|litres|ml|ea|each|box|ctn|carton|bag|bunch|bun|pkt|pack|pc|pcs|unit|units|tray|tub|tin|bottle|case)\b/g, " ")
-    .replace(/\b(?:kg|kgs|g|gm|gram|grams|l|lt|ltr|litre|litres|ml|ea|each|box|ctn|carton|bag|bunch|bun|pkt|pack|pc|pcs|unit|units|tray|tub|tin|bottle|case|fresh|frozen|chilled|whole|sliced|diced|chopped|peeled|premium|choice|grade|brand|approx|small|large|medium)\b/g, " ")
+    .replace(/\b(?:kg|kgs|g|gm|gram|grams|l|lt|ltr|litre|litres|ml|ea|each|box|ctn|carton|bag|bunch|bun|pkt|pack|pc|pcs|unit|units|tray|tub|tin|bottle|case|fresh|frozen|chilled|whole|sliced|diced|chopped|peeled|premium|choice|grade|brand|approx|small|large|medium|ord|del|qty|supply|supplied|unit|price|total|gst|code|product|description)\b/g, " ")
+    .replace(/\b[a-z]{0,3}\d+[a-z0-9-]*\b/g, " ")
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -88,14 +89,20 @@ function scoreIngredientMatch(row: any, ingredient: any) {
   const sharedTokens = ingredientTokens.filter((token: string) => rowTokens.includes(token));
   const overlapOfIngredient = sharedTokens.length / Math.max(ingredientTokens.length, 1);
   const overlapOfRow = sharedTokens.length / Math.max(rowTokens.length, 1);
-  const firstTokenBonus = rowTokens[0] && ingredientTokens[0] && rowTokens[0] === ingredientTokens[0] ? 12 : 0;
+  const firstTokenBonus = rowTokens[0] && ingredientTokens[0] && rowTokens[0] === ingredientTokens[0] ? 14 : 0;
+  const partialTokenBonus = ingredientTokens.reduce((sum: number, ingredientToken: string) => {
+    const partial = rowTokens.some((rowToken: string) =>
+      rowToken.length >= 5 && ingredientToken.length >= 5 && (rowToken.includes(ingredientToken) || ingredientToken.includes(rowToken))
+    );
+    return sum + (partial ? 4 : 0);
+  }, 0);
 
-  let score = sharedTokens.length * 10 + Math.round(overlapOfIngredient * 25) + Math.round(overlapOfRow * 15) + firstTokenBonus;
-  if (rowContainsIngredient || ingredientContainsRow) score += 35;
+  let score = sharedTokens.length * 12 + Math.round(overlapOfIngredient * 30) + Math.round(overlapOfRow * 18) + firstTokenBonus + partialTokenBonus;
+  if (rowContainsIngredient || ingredientContainsRow) score += 38;
 
   let matchConfidence: "high" | "medium" | "low" = "low";
-  if (score >= 68 || ((rowContainsIngredient || ingredientContainsRow) && sharedTokens.length >= 1)) matchConfidence = "high";
-  else if (score >= 38 || (sharedTokens.length >= 2 && overlapOfIngredient >= 0.5)) matchConfidence = "medium";
+  if (score >= 70 || ((rowContainsIngredient || ingredientContainsRow) && sharedTokens.length >= 1)) matchConfidence = "high";
+  else if (score >= 34 || (sharedTokens.length >= 2 && overlapOfIngredient >= 0.45)) matchConfidence = "medium";
 
   return {
     ingredient,

@@ -25,6 +25,7 @@ import {
   getInvoiceRowRecoveryPriceAnchorCount,
   rebuildInvoiceTextFromPriceAnchors,
   splitInvoiceTextWithSoftLineBreaks,
+  scoreInvoiceParserCandidate,
 } from "../lib/invoiceParsing";
 
 type UseInvoiceIntakeArgs = {
@@ -285,8 +286,16 @@ export function useInvoiceIntake(args: UseInvoiceIntakeArgs) {
       invoiceRowRecoverySource: recoverySource,
     }));
 
+    const classifiedRows = applyInvoiceCogsCategoryDetection(enhanced, supplierName).filter((row: any) => {
+      const name = String(row?.name || row?.description || row?.rawLine || "").trim();
+      const hasLetters = /[a-zA-Z]/.test(name);
+      const hasValue = safeNumber(row?.lineTotal ?? row?.total ?? row?.amount ?? row?.purchasePrice ?? row?.unitPrice) > 0;
+      const tooLongWithoutStructure = name.split(/\s+/).length > 34 && !hasValue;
+      return hasLetters && !tooLongWithoutStructure;
+    });
+
     return applyInvoiceIngredientAutoMatching(
-      applyInvoiceCogsCategoryDetection(enhanced, supplierName),
+      classifiedRows,
       supplierIngredients
     );
   };
@@ -307,6 +316,10 @@ export function useInvoiceIntake(args: UseInvoiceIntakeArgs) {
         const matchedRows = meaningfulRows.filter((row: any) => String(row?.linkedIngredientId || "").trim());
         const pricedRows = meaningfulRows.filter((row: any) => safeNumber(row?.lineTotal ?? row?.total ?? row?.amount ?? row?.purchasePrice ?? row?.unitPrice) > 0);
 
+        const parserStats = scoreInvoiceParserCandidate(rows, label);
+        const unknownRows = meaningfulRows.filter((row: any) => getInvoiceRowCogsTypeForApp(row) === "unknown").length;
+        const suspectedMergedRows = meaningfulRows.filter((row: any) => Boolean(row?.suspectedMergedRow)).length;
+
         candidates.push({
           label,
           rows,
@@ -314,7 +327,10 @@ export function useInvoiceIntake(args: UseInvoiceIntakeArgs) {
           selectedCount: selectedRows.length,
           matchedCount: matchedRows.length,
           pricedCount: pricedRows.length,
-          score: meaningfulRows.length * 10 + pricedRows.length * 3 + matchedRows.length * 2 + selectedRows.length,
+          unknownRows,
+          suspectedMergedRows,
+          parserScore: parserStats.score,
+          score: parserStats.score + meaningfulRows.length * 10 + pricedRows.length * 6 + matchedRows.length * 4 + selectedRows.length - unknownRows * 5 - suspectedMergedRows * 10,
         });
       } catch (error) {
         console.warn(`GP Police invoice row recovery candidate failed: ${label}`, error);
@@ -324,6 +340,7 @@ export function useInvoiceIntake(args: UseInvoiceIntakeArgs) {
     addCandidate("primary_smart_parser", cleanedText);
     addCandidate("soft_line_break_recovery", splitInvoiceTextWithSoftLineBreaks(cleanedText));
     addCandidate("price_anchor_recovery", rebuildInvoiceTextFromPriceAnchors(cleanedText));
+    addCandidate("combined_recovery", splitInvoiceTextWithSoftLineBreaks(rebuildInvoiceTextFromPriceAnchors(cleanedText) || cleanedText));
 
     const bestCandidate = candidates
       .filter((candidate) => Array.isArray(candidate.rows))

@@ -151,6 +151,7 @@ export function classifyInvoiceCogsCategory(row: any, supplierName: string) {
 
   const nonCogsTerms = [
     "pest", "repair", "equipment", "uniform", "knife hire", "rental", "service fee", "delivery fee", "freight", "credit", "rebate", "surcharge",
+    "gas", "electric", "hire", "maintenance", "laundry", "linen", "apron", "sharpening",
   ];
 
   const consumableTerms = [
@@ -161,6 +162,7 @@ export function classifyInvoiceCogsCategory(row: any, supplierName: string) {
     "garbage bag", "bin liner", "takeaway", "take away", "container", "containers", "lid", "lids",
     "cup", "cups", "straw", "straws", "docket", "docket roll", "blue roll", "baking paper",
     "greaseproof", "label", "labels", "bag", "bags", "cutlery", "fork", "knife", "spoon", "skewer",
+    "portion cup", "portion cups", "sauce cup", "pizza box", "vac bag", "vacuum bag", "foil tray", "catering tray", "coffee cup", "receipt roll", "thermal roll",
   ];
 
   const foodTerms = [
@@ -171,6 +173,7 @@ export function classifyInvoiceCogsCategory(row: any, supplierName: string) {
     "mushroom", "avocado", "cucumber", "capsicum", "garlic", "ginger", "lemon", "lime", "orange", "apple",
     "banana", "berry", "berries", "peas", "beans", "corn", "spinach", "rocket", "kale", "broccoli", "cauliflower",
     "frozen", "dry", "dairy", "yeast", "salt", "pepper", "crumb", "crumbs", "mayonnaise", "mustard", "pickle",
+    "brisket", "rib", "ribs", "mince", "sausage", "snag", "snags", "wings", "thigh", "breast", "fillet", "fillets", "mozzarella", "parmesan", "ricotta", "yoghurt", "yogurt", "noodle", "noodles",
   ];
 
   const nonCogsMatch = hasInvoiceCategoryTerm(searchText, nonCogsTerms);
