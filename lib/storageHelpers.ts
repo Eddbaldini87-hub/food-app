@@ -6,17 +6,17 @@ export function isValidObject(value: unknown) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-export function safeParse<T>(
+export function safeParseRawValue<T>(
+  rawValue: string | null | undefined,
   key: string,
   fallback: T,
   validate?: (value: unknown) => boolean,
   onFailure?: (key: string) => void
 ): T {
   try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return fallback;
+    if (!rawValue) return fallback;
 
-    const parsed = JSON.parse(raw) as unknown;
+    const parsed = JSON.parse(rawValue) as unknown;
 
     if (validate && !validate(parsed)) {
       throw new Error("Invalid data shape");
@@ -25,6 +25,24 @@ export function safeParse<T>(
     return parsed as T;
   } catch (err) {
     console.warn("GP Police storage parse failed:", key, err);
+    if (onFailure) {
+      onFailure(key);
+    }
+    return fallback;
+  }
+}
+
+export function safeParse<T>(
+  key: string,
+  fallback: T,
+  validate?: (value: unknown) => boolean,
+  onFailure?: (key: string) => void
+): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return safeParseRawValue(raw, key, fallback, validate, onFailure);
+  } catch (err) {
+    console.warn("GP Police storage read failed:", key, err);
     if (onFailure) {
       onFailure(key);
     }
@@ -49,6 +67,16 @@ export function safeSetLocalStorageRaw(key: string, value: string) {
     return true;
   } catch (err) {
     console.warn("GP Police raw storage restore blocked:", key, err);
+    return false;
+  }
+}
+
+export function safeRemoveLocalStorageKey(key: string) {
+  try {
+    localStorage.removeItem(key);
+    return true;
+  } catch (err) {
+    console.warn("GP Police storage remove blocked:", key, err);
     return false;
   }
 }
@@ -78,14 +106,11 @@ export function isValidVenueState(value: unknown) {
   );
 }
 
-export function safeParseVenueState<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return fallback;
-
-    return JSON.parse(raw) as T;
-  } catch (err) {
-    console.warn("GP Police venue storage parse failed:", key, err);
-    return fallback;
-  }
+export function safeParseVenueState<T>(
+  key: string,
+  fallback: T,
+  validate?: (value: unknown) => boolean,
+  onFailure?: (key: string) => void
+): T {
+  return safeParse<T>(key, fallback, validate, onFailure);
 }

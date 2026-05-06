@@ -7,9 +7,13 @@ import {
 } from "../lib/gpPoliceConstants";
 import { getVenueDisplayName } from "../lib/gpPoliceHelpers";
 import {
-  safeParseVenueState,
-  safeSetLocalStorageValue,
+  isValidObject,
   isValidVenueState,
+  safeParse,
+  safeParseRawValue,
+  safeParseVenueState,
+  safeRemoveLocalStorageKey,
+  safeSetLocalStorageValue,
 } from "../lib/storageHelpers";
 
 type UseVenueControllerArgs = {
@@ -58,15 +62,17 @@ export function useVenueController(args: UseVenueControllerArgs) {
 
   useEffect(() => {
     const fallbackVenueState = getDefaultVenueState();
-    const savedVenues = localStorage.getItem(VENUE_STORAGE_KEYS.VENUES);
+    const parsedVenues = safeParseVenueState<any>(
+      VENUE_STORAGE_KEYS.VENUES,
+      null,
+      isValidVenueState
+    );
 
-    if (!savedVenues) {
+    if (!parsedVenues) {
       safeSetLocalStorageValue(VENUE_STORAGE_KEYS.VENUES, fallbackVenueState);
       setVenueState(fallbackVenueState);
       return;
     }
-
-    const parsedVenues = safeParseVenueState<any>(VENUE_STORAGE_KEYS.VENUES, null);
 
     if (!isValidVenueState(parsedVenues)) {
       console.warn("Invalid venue structure");
@@ -97,14 +103,7 @@ export function useVenueController(args: UseVenueControllerArgs) {
 
 
   const readVenueData = () => {
-    const parsedVenueData = safeParseVenueState<Record<string, any>>(VENUE_STORAGE_KEYS.VENUE_DATA, {});
-
-    if (!parsedVenueData || typeof parsedVenueData !== "object" || Array.isArray(parsedVenueData)) {
-      console.warn("Invalid venue data structure");
-      return {};
-    }
-
-    return parsedVenueData;
+    return safeParse<Record<string, any>>(VENUE_STORAGE_KEYS.VENUE_DATA, {}, isValidObject);
   };
 
   const saveVenueSnapshotForId = (venueId: string, showSavedMessage = false) => {
@@ -189,7 +188,7 @@ export function useVenueController(args: UseVenueControllerArgs) {
       updatedAt: now,
     };
 
-    GP_POLICE_APP_KEYS.forEach((key) => localStorage.removeItem(key));
+    GP_POLICE_APP_KEYS.forEach((key) => safeRemoveLocalStorageKey(key));
 
     const nextVenueState = {
       currentVenueId: newVenue.id,
@@ -361,21 +360,21 @@ export function useVenueController(args: UseVenueControllerArgs) {
 
     const reader = new FileReader();
     reader.onload = () => {
-      try {
-        const parsedBackup = JSON.parse(String(reader.result || ""));
-        if (!parsedBackup || parsedBackup.app !== "GP Police" || !parsedBackup.data || typeof parsedBackup.data !== "object" || Array.isArray(parsedBackup.data)) {
-          setPendingVenueBackup(null);
-          setVenueMessage("Invalid backup file — not a GP Police export.");
-          return;
-        }
+      const parsedBackup = safeParseRawValue<Record<string, any> | null>(
+        String(reader.result || ""),
+        "uploaded_venue_backup",
+        null,
+        isValidObject
+      );
 
-        setPendingVenueBackup(parsedBackup);
-        setVenueMessage(`Backup loaded for ${parsedBackup.venue?.name || "Imported Venue"}. Choose how to restore it.`);
-      } catch (error) {
-        console.error("Failed reading venue backup", error);
+      if (!parsedBackup || parsedBackup.app !== "GP Police" || !parsedBackup.data || typeof parsedBackup.data !== "object" || Array.isArray(parsedBackup.data)) {
         setPendingVenueBackup(null);
         setVenueMessage("Invalid backup file — not a GP Police export.");
+        return;
       }
+
+      setPendingVenueBackup(parsedBackup);
+      setVenueMessage(`Backup loaded for ${parsedBackup.venue?.name || "Imported Venue"}. Choose how to restore it.`);
     };
     reader.onerror = () => {
       setPendingVenueBackup(null);

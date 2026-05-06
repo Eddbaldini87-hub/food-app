@@ -8,7 +8,7 @@ import {
   STORAGE_KEYS,
   VENUE_STORAGE_KEYS,
 } from "../lib/gpPoliceConstants";
-import { safeSetLocalStorageRaw, safeSetLocalStorageValue } from "../lib/storageHelpers";
+import { isValidArray, isValidObject, safeParse, safeParseRawValue, safeSetLocalStorageRaw, safeSetLocalStorageValue } from "../lib/storageHelpers";
 
 const STOCKTAKE_STORAGE_KEY = "gpPolice_stocktake_v1";
 const SUPPLIER_MATCH_MEMORY_STORAGE_KEY = "gpPoliceSupplierMatchMemory";
@@ -108,10 +108,9 @@ export function useBackup(args: UseBackupArgs) {
         return;
       }
 
-      try {
-        JSON.parse(rawValue);
-      } catch (error) {
-        console.warn("GP Police restore skipped invalid JSON value:", key, error);
+      const parsedValue = safeParseRawValue(rawValue, key, null);
+      if (parsedValue === null) {
+        console.warn("GP Police restore skipped invalid JSON value:", key);
         return;
       }
 
@@ -124,16 +123,7 @@ export function useBackup(args: UseBackupArgs) {
   };
 
   const readBackupHistory = () => {
-    try {
-      const rawHistory = localStorage.getItem(BACKUP_HISTORY_KEY);
-      if (!rawHistory) return [];
-
-      const parsedHistory = JSON.parse(rawHistory);
-      return Array.isArray(parsedHistory) ? parsedHistory : [];
-    } catch (error) {
-      console.warn("Failed reading GP Police backup history", error);
-      return [];
-    }
+    return safeParse<any[]>(BACKUP_HISTORY_KEY, [], isValidArray);
   };
 
   useEffect(() => {
@@ -188,16 +178,11 @@ export function useBackup(args: UseBackupArgs) {
       return snapshot[directKey];
     }
 
-    try {
-      if (!snapshot?.data || typeof snapshot.data !== "object" || Array.isArray(snapshot.data)) return null;
-      const rawValue = snapshot.data[rawStorageKey];
-      if (typeof rawValue !== "string") return null;
-      const parsedValue = JSON.parse(rawValue);
-      return Array.isArray(parsedValue) ? parsedValue : null;
-    } catch (error) {
-      console.warn("GP Police backup array read skipped:", directKey, error);
-      return null;
-    }
+    if (!snapshot?.data || typeof snapshot.data !== "object" || Array.isArray(snapshot.data)) return null;
+    const rawValue = snapshot.data[rawStorageKey];
+    if (typeof rawValue !== "string") return null;
+    const parsedValue = safeParseRawValue<any[] | null>(rawValue, rawStorageKey, null, isValidArray);
+    return Array.isArray(parsedValue) ? parsedValue : null;
   };
 
   const safeReadBackupObject = (snapshot: any, directKey: string, rawStorageKey: string) => {
@@ -205,16 +190,11 @@ export function useBackup(args: UseBackupArgs) {
       return snapshot[directKey];
     }
 
-    try {
-      if (!snapshot?.data || typeof snapshot.data !== "object" || Array.isArray(snapshot.data)) return null;
-      const rawValue = snapshot.data[rawStorageKey];
-      if (typeof rawValue !== "string") return null;
-      const parsedValue = JSON.parse(rawValue);
-      return parsedValue && typeof parsedValue === "object" && !Array.isArray(parsedValue) ? parsedValue : null;
-    } catch (error) {
-      console.warn("GP Police backup object read skipped:", directKey, error);
-      return null;
-    }
+    if (!snapshot?.data || typeof snapshot.data !== "object" || Array.isArray(snapshot.data)) return null;
+    const rawValue = snapshot.data[rawStorageKey];
+    if (typeof rawValue !== "string") return null;
+    const parsedValue = safeParseRawValue<Record<string, any> | null>(rawValue, rawStorageKey, null, isValidObject);
+    return parsedValue && typeof parsedValue === "object" && !Array.isArray(parsedValue) ? parsedValue : null;
   };
 
   const getBackupRestoreSafetyReport = (snapshot: any) => {
@@ -354,20 +334,18 @@ export function useBackup(args: UseBackupArgs) {
   };
 
   const restoreEmergencyBackup = () => {
-    const rawBackup = localStorage.getItem(VENUE_STORAGE_KEYS.EMERGENCY_BACKUP);
+    const backup = safeParse<Record<string, any> | null>(
+      VENUE_STORAGE_KEYS.EMERGENCY_BACKUP,
+      null,
+      isValidObject
+    );
 
-    if (!rawBackup) {
-      window.alert("No emergency backup found.");
+    if (!backup) {
+      window.alert("No usable emergency backup found.");
       return;
     }
 
-    try {
-      const backup = JSON.parse(rawBackup);
-      restoreFromSnapshot(backup, "the emergency backup");
-    } catch (error) {
-      console.warn("Failed to read emergency backup", error);
-      window.alert("Backup restore failed. The backup data may be damaged.");
-    }
+    restoreFromSnapshot(backup, "the emergency backup");
   };
 
   return {
