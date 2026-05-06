@@ -2,21 +2,37 @@
 
 export function Dashboard(props: any) {
   const styles = props.styles || {};
-  const finalDishes = Array.isArray(props.computedRecipes) ? props.computedRecipes.filter((recipe: any) => recipe.recipeType === "final dish") : [];
+  const finalDishes = Array.isArray(props.computedRecipes)
+    ? props.computedRecipes.filter((recipe: any) => recipe.recipeType === "final dish")
+    : [];
   const ingredients = Array.isArray(props.supplierIngredients) ? props.supplierIngredients : [];
   const invoiceRecords = Array.isArray(props.invoiceSpendRecords) ? props.invoiceSpendRecords : [];
   const stockDamageReport = Array.isArray(props.stockDamageReport) ? props.stockDamageReport : [];
   const gpDamageSummary = props.gpDamageSummary || {};
   const gpImpactSummary = props.gpImpactSummary || {};
-  const alerts = Array.isArray(gpImpactSummary.alerts) ? gpImpactSummary.alerts : [];
-  const recommendedActions = Array.isArray(gpImpactSummary.recommendedActions) ? gpImpactSummary.recommendedActions : [];
-  const biggestLosers = Array.isArray(gpImpactSummary.biggestLosers) ? gpImpactSummary.biggestLosers : [];
-  const biggestIngredientRisks = Array.isArray(gpImpactSummary.biggestIngredientRisks) ? gpImpactSummary.biggestIngredientRisks : [];
-  const decisionSummary = gpImpactSummary.decisionSummary || {};
-  const totalInvoiceSpend = invoiceRecords.reduce((sum: number, record: any) => sum + props.safeNumber(record?.totalCost ?? record?.total ?? record?.amount ?? 0), 0);
+  const gpBiggestLosers = Array.isArray(gpImpactSummary.biggestLosers) ? gpImpactSummary.biggestLosers : [];
+  const gpAlerts = Array.isArray(gpImpactSummary.alerts) ? gpImpactSummary.alerts : [];
+  const gpActions = Array.isArray(gpImpactSummary.recommendedActions) ? gpImpactSummary.recommendedActions : [];
+  const recentWins = Array.isArray(gpImpactSummary.recentWins) ? gpImpactSummary.recentWins : [];
+  const damageDamageTrend = gpImpactSummary.damageDamageTrend || {};
+  const proofEngine = gpImpactSummary.proofEngine || {};
+  const recipesWithNoComponents = Array.isArray(props.recipesWithNoComponents) ? props.recipesWithNoComponents : [];
+  const finalDishesWithNoSellPrice = Array.isArray(props.finalDishesWithNoSellPrice) ? props.finalDishesWithNoSellPrice : [];
+  const posSales = Array.isArray(props.posSales) ? props.posSales : [];
+  const isMobileViewport = Boolean(props.isMobileViewport);
+
+  const safeNumber = props.safeNumber || ((value: any) => {
+    const parsed = Number(value || 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  });
+
+  const totalInvoiceSpend = invoiceRecords.reduce(
+    (sum: number, record: any) => sum + safeNumber(record?.totalCost ?? record?.total ?? record?.amount ?? 0),
+    0
+  );
 
   const formatLossQuantity = (value: any) => {
-    const numberValue = props.safeNumber ? props.safeNumber(value) : Number(value || 0);
+    const numberValue = safeNumber(value);
     if (!Number.isFinite(numberValue)) return "0";
     return props.roundTo ? props.roundTo(numberValue, 2) : Math.round(numberValue * 100) / 100;
   };
@@ -25,210 +41,329 @@ export function Dashboard(props: any) {
     return props.formatCurrency ? props.formatCurrency(value || 0) : `$${Number(value || 0).toFixed(2)}`;
   };
 
-  const formatPercent = (value: any) => {
-    const numericValue = props.safeNumber ? props.safeNumber(value) : Number(value || 0);
-    if (!Number.isFinite(numericValue)) return "0%";
-    return `${Math.round(numericValue)}%`;
+  const recipeIssueCount = recipesWithNoComponents.length + finalDishesWithNoSellPrice.length;
+  const thisWeekDamage = safeNumber(gpDamageSummary.thisWeekDamage);
+  const lastWeekDamage = safeNumber(gpDamageSummary.lastWeekDamage);
+  const damageRising = thisWeekDamage > 0 && thisWeekDamage > lastWeekDamage;
+  const topStockDamage = stockDamageReport[0] || null;
+
+  const openInvoiceCamera = () => {
+    if (typeof props.handleOpenInvoiceCamera === "function") {
+      props.handleOpenInvoiceCamera();
+      return;
+    }
+
+    props.handleSidebarNavigation?.("invoice");
   };
 
-  const getAlertCardStyle = (level: string) => {
-    const base = styles.infoCard || {};
-    if (level === "danger") {
-      return { ...base, border: "1px solid rgba(248, 113, 113, 0.45)", background: "rgba(127, 29, 29, 0.16)" };
-    }
-    if (level === "warning") {
-      return { ...base, border: "1px solid rgba(245, 158, 11, 0.42)", background: "rgba(120, 53, 15, 0.14)" };
-    }
-    return { ...base, border: "1px solid rgba(59, 130, 246, 0.34)", background: "rgba(30, 64, 175, 0.12)" };
+  const openInvoiceReview = () => {
+    props.handleSidebarNavigation?.("suppliers");
   };
+
+  const nextAction = (() => {
+    if (safeNumber(gpImpactSummary.totalWeeklyDamage) > 0) {
+      return {
+        label: "💀 Menu damage detected",
+        detail: `${gpImpactSummary.affectedRecipeCount || 0} dish(es) are getting mugged by supplier prices. Weekly damage: ${formatMoney(gpImpactSummary.totalWeeklyDamage)}.`,
+        button: "Show The Damage",
+        action: () => props.handleSidebarNavigation?.("menu"),
+      };
+    }
+
+    if (damageRising) {
+      return {
+        label: "💀 GP is bleeding harder this week",
+        detail: `This week: ${formatMoney(thisWeekDamage)} vs ${formatMoney(lastWeekDamage)} last week. Open the damage board and stop the leak before the till cops it.`,
+        button: "Show The Damage",
+        action: () => props.handleSidebarNavigation?.("menu"),
+      };
+    }
+
+    if (topStockDamage) {
+      return {
+        label: "🚨 Stock is walking out the back door",
+        detail: `${topStockDamage.ingredientName || "An ingredient"} is doing a runner: ${formatLossQuantity(topStockDamage.loss)} ${topStockDamage.purchaseUnit || "unit"} damage.`,
+        button: "Open Stock Damage",
+        action: () => props.handleSidebarNavigation?.("stock"),
+      };
+    }
+
+    if (recipeIssueCount > 0) {
+      return {
+        label: "⚠️ Recipes are half-dressed",
+        detail: `${recipeIssueCount} recipe problem(s) need fixing before you trust the numbers.`,
+        button: "Fix Recipes",
+        action: () => props.handleSidebarNavigation?.("recipes"),
+      };
+    }
+
+    if (invoiceRecords.length === 0) {
+      return {
+        label: "📸 Feed the beast an invoice",
+        detail: "Snap a supplier bill. No evidence, no arrest. Simple.",
+        button: "Snap Invoice",
+        action: openInvoiceCamera,
+      };
+    }
+
+    return {
+      label: "✅ No alarms screaming right now",
+      detail: "No fires on the board. Keep feeding invoices and keep suppliers honest.",
+      button: "Snap Invoice",
+      action: openInvoiceCamera,
+    };
+  })();
+
+  const commandCardStyle = {
+    ...styles.card,
+    border: "1px solid rgba(245, 158, 11, 0.32)",
+    background: "linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(12, 12, 14, 0.96))",
+  };
+
+  const heroButtonStyle = {
+    ...(styles.primaryButton || {}),
+    minHeight: isMobileViewport ? 58 : 48,
+    fontWeight: 900,
+    fontSize: isMobileViewport ? 16 : undefined,
+  };
+
+  const mobileButtonGridStyle = {
+    display: "grid",
+    gridTemplateColumns: isMobileViewport ? "1fr" : "repeat(3, minmax(0, 1fr))",
+    gap: 10,
+    marginTop: 12,
+  };
+
+  const smallMutedTextStyle = {
+    ...(styles.sectionSubtitle || {}),
+    marginTop: 6,
+  };
+
+  const proofToneStyle = proofEngine.confidence === "high"
+    ? { border: "1px solid rgba(34, 197, 94, 0.42)", background: "rgba(34, 197, 94, 0.10)" }
+    : proofEngine.confidence === "medium" || proofEngine.confidence === "early"
+      ? { border: "1px solid rgba(245, 158, 11, 0.42)", background: "rgba(245, 158, 11, 0.10)" }
+      : { border: "1px solid rgba(148, 163, 184, 0.26)", background: "rgba(15, 23, 42, 0.55)" };
 
   return (
     <div style={styles.pageWrapper}>
       <div style={styles.pageHeader}>
         <h1 style={styles.pageTitle}>Main Hideout</h1>
-        <p style={styles.pageSubtitle}>Build recipes, price dishes, track invoices, and keep your GP in line.</p>
+        <p style={styles.pageSubtitle}>Cook food. Don’t cook the books. GP Police sniffs out the margin leaks before they mug your menu.</p>
+      </div>
+
+      <div style={{ ...styles.infoCard, border: "1px solid rgba(251, 191, 36, 0.32)", background: "linear-gradient(135deg, rgba(251, 191, 36, 0.12), rgba(15, 23, 42, 0.72))" }}>
+        <div style={styles.infoCardTitle}>🚔 GP Police is on shift</div>
+        <div style={styles.infoCardSubtext}>Invoices are evidence. Recipes are suspects. Suppliers don’t get to rob the GP in peace.</div>
+      </div>
+
+      <div style={commandCardStyle}>
+        <div style={styles.dashboardSectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>{nextAction.label}</h2>
+            <p style={styles.sectionSubtitle}>{nextAction.detail}</p>
+          </div>
+          <button type="button" style={heroButtonStyle} onClick={nextAction.action}>
+            {nextAction.button}
+          </button>
+        </div>
+      </div>
+
+      <div style={{ ...styles.card, ...proofToneStyle }}>
+        <div style={styles.dashboardSectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>🧾 Evidence Locker</h2>
+            <p style={styles.sectionSubtitle}>Shows whether GP Police has enough proof to call the damage, not guess it.</p>
+          </div>
+          <div style={styles.infoCardSubtext}>{String(proofEngine.confidence || "low").toUpperCase()} confidence</div>
+        </div>
+        <div style={styles.infoGrid}>
+          <div style={styles.infoCard}>
+            <div style={styles.infoCardTitle}>{proofEngine.headline || "Needs real kitchen evidence"}</div>
+            <div style={styles.infoCardSubtext}>{proofEngine.trustMessage || "Lock invoices and load POS so GP Police stops guessing and starts arresting leaks."}</div>
+          </div>
+          <div style={styles.infoCard}>
+            <div style={styles.infoCardTitle}>Damage Trend</div>
+            <div style={styles.infoCardText}>{damageDamageTrend.proofLabel || "Waiting"}</div>
+            <div style={styles.infoCardSubtext}>{damageDamageTrend.direction ? `Direction: ${damageDamageTrend.direction}` : "Needs more weeks"}</div>
+          </div>
+          <div style={styles.infoCard}>
+            <div style={styles.infoCardTitle}>Latest Punch</div>
+            <div style={styles.infoCardText}>{formatMoney(damageDamageTrend.change || 0)}</div>
+            <div style={styles.infoCardSubtext}>Compared with the last tracked week.</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ ...styles.card, border: "1px solid rgba(34, 197, 94, 0.30)", background: "rgba(6, 78, 59, 0.14)" }}>
+        <div style={styles.dashboardSectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>✅ Money You Stopped Bleeding</h2>
+            <p style={styles.sectionSubtitle}>Wins board. Supplier damage found, margin leaks plugged, chef stress lowered.</p>
+          </div>
+        </div>
+        <div style={styles.infoGrid}>
+          {recentWins.slice(0, 4).map((win: any, index: number) => (
+            <div key={`${win.title}-${index}`} style={styles.infoCard}>
+              <div style={styles.infoCardTitle}>{win.title}</div>
+              <div style={styles.infoCardSubtext}>{win.detail}</div>
+              <div style={{ ...styles.infoCardSubtext, marginTop: 8 }}>Confidence: {String(win.confidence || "low").toUpperCase()}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ ...styles.card, border: "1px solid rgba(59, 130, 246, 0.28)", background: "rgba(15, 23, 42, 0.72)" }}>
+        <div style={styles.dashboardSectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>📸 Invoice Drive-By</h2>
+            <p style={styles.sectionSubtitle}>Snap it, fix the ugly rows, lock it. No spreadsheet therapy.</p>
+          </div>
+        </div>
+
+        <div style={mobileButtonGridStyle}>
+          <button type="button" style={styles.primaryButton} onClick={openInvoiceCamera}>📷 Snap Invoice</button>
+          <button type="button" style={styles.secondaryButton} onClick={openInvoiceReview}>Fix The Mess</button>
+          <button type="button" style={styles.secondaryButton} onClick={() => props.handleSidebarNavigation?.("invoice")}>Damage Folder</button>
+        </div>
       </div>
 
       <div style={styles.dashboardGrid}>
-        <button type="button" style={styles.metricCard} onClick={() => props.handleSidebarNavigation?.("ingredients")}>
-          <div style={styles.metricLabel}>Ingredients</div>
-          <div style={styles.metricValue}>{ingredients.length}</div>
+        <button type="button" style={styles.metricCard} onClick={() => props.handleSidebarNavigation?.("invoice")}>
+          <div style={styles.metricLabel}>Invoice Evidence</div>
+          <div style={styles.metricValue}>{formatMoney(totalInvoiceSpend)}</div>
+          <div style={smallMutedTextStyle}>Snap. Fix. Lock. Catch the robbery.</div>
         </button>
         <button type="button" style={styles.metricCard} onClick={() => props.handleSidebarNavigation?.("recipes")}>
-          <div style={styles.metricLabel}>Recipes</div>
-          <div style={styles.metricValue}>{props.totalRecipeCount || 0}</div>
+          <div style={styles.metricLabel}>Plates Under Watch</div>
+          <div style={styles.metricValue}>{finalDishes.length}</div>
+          <div style={smallMutedTextStyle}>Menu items sitting under GP surveillance.</div>
         </button>
-        <button type="button" style={styles.metricCard} onClick={() => props.handleSidebarNavigation?.("invoice")}>
-          <div style={styles.metricLabel}>Invoice Spend</div>
-          <div style={styles.metricValue}>{props.formatCurrency ? props.formatCurrency(totalInvoiceSpend) : totalInvoiceSpend}</div>
+        <button type="button" style={styles.metricCard} onClick={() => props.handleSidebarNavigation?.("ingredients")}>
+          <div style={styles.metricLabel}>Supplier Lines</div>
+          <div style={styles.metricValue}>{ingredients.length}</div>
+          <div style={smallMutedTextStyle}>The stuff suppliers keep shifting while nobody is looking.</div>
         </button>
       </div>
 
       <div style={styles.card}>
         <div style={styles.dashboardSectionHeader}>
           <div>
-            <h2 style={styles.sectionTitle}>🚔 Main Hideout Decision Engine</h2>
-            <p style={styles.sectionSubtitle}>Price movement, menu GP impact, and recommended actions from locked invoices.</p>
+            <h2 style={styles.sectionTitle}>💀 Where The Money Is Bleeding</h2>
+            <p style={styles.sectionSubtitle}>No vibes. Just damage called from locked invoice evidence.</p>
           </div>
-        </div>
-        <div style={styles.infoGrid}>
-          <div style={getAlertCardStyle(decisionSummary.status)}>
-            <div style={styles.infoCardTitle}>Status</div>
-            <div style={styles.infoCardText}>{decisionSummary.headline || "GP stable"}</div>
-            <div style={styles.infoCardSubtext}>{decisionSummary.topAction || "Keep locking invoices and matching ingredients."}</div>
-          </div>
-          <div style={styles.infoCard}>
-            <div style={styles.infoCardTitle}>Menu Damage</div>
-            <div style={styles.infoCardText}>{formatMoney(gpImpactSummary.totalWeeklyDamage)}</div>
-            <div style={styles.infoCardSubtext}>Estimated weekly damage using POS/weekly sales where available.</div>
-          </div>
-          <div style={styles.infoCard}>
-            <div style={styles.infoCardTitle}>Affected Dishes</div>
-            <div style={styles.infoCardText}>{gpImpactSummary.affectedRecipeCount || 0}</div>
-            <div style={styles.infoCardSubtext}>Final dishes hit by supplier price movement.</div>
-          </div>
-          <div style={styles.infoCard}>
-            <div style={styles.infoCardTitle}>Active Alerts</div>
-            <div style={styles.infoCardText}>{alerts.length}</div>
-            <div style={styles.infoCardSubtext}>{gpImpactSummary.dangerAlertCount || 0} danger · {gpImpactSummary.warningAlertCount || 0} warning</div>
-          </div>
-        </div>
-      </div>
-
-      <div style={styles.card}>
-        <div style={styles.dashboardSectionHeader}>
-          <div>
-            <h2 style={styles.sectionTitle}>🎯 Recommended Actions</h2>
-            <p style={styles.sectionSubtitle}>The app should tell you what to do next, not just show numbers.</p>
-          </div>
-        </div>
-        {recommendedActions.length === 0 ? (
-          <div style={styles.emptyState || styles.infoCardText}>No actions yet. Lock more invoices and match recipe ingredients to activate the decision layer.</div>
-        ) : (
-          <div style={styles.infoGrid}>
-            {recommendedActions.slice(0, 6).map((action: any, index: number) => (
-              <div key={`${action.title || "action"}_${index}`} style={getAlertCardStyle(action.level)}>
-                <div style={styles.infoCardTitle}>{action.title || "Recommended action"}</div>
-                <div style={styles.infoCardText}>{action.action || "Review this item."}</div>
-                <div style={styles.infoCardSubtext}>{action.reason || "GP Police found a risk worth checking."}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div style={styles.card}>
-        <div style={styles.dashboardSectionHeader}>
-          <div>
-            <h2 style={styles.sectionTitle}>🚨 Live GP Alerts</h2>
-            <p style={styles.sectionSubtitle}>Price spikes and menu damage that need eyes before they become profit leaks.</p>
-          </div>
-        </div>
-        {alerts.length === 0 ? (
-          <div style={styles.emptyState || styles.infoCardText}>No GP alerts yet. This is normal until invoices are locked with ingredient matches.</div>
-        ) : (
-          <div style={styles.infoGrid}>
-            {alerts.slice(0, 8).map((alert: any, index: number) => (
-              <div key={`${alert.title || "alert"}_${index}`} style={getAlertCardStyle(alert.level)}>
-                <div style={styles.infoCardTitle}>{alert.title || "GP alert"}</div>
-                <div style={styles.infoCardText}>{alert.detail || "Review this before the GP leaks."}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div style={styles.card}>
-        <div style={styles.dashboardSectionHeader}>
-          <div>
-            <h2 style={styles.sectionTitle}>💀 Top Menu Damage</h2>
-            <p style={styles.sectionSubtitle}>Dishes most exposed to supplier price movement.</p>
-          </div>
-        </div>
-        {biggestLosers.length === 0 ? (
-          <div style={styles.emptyState || styles.infoCardText}>No affected dishes found yet. Match invoice rows to ingredients used in final dishes.</div>
-        ) : (
-          <div style={styles.infoGrid}>
-            {biggestLosers.slice(0, 6).map((item: any) => (
-              <div key={item.recipeId || item.recipeName} style={styles.infoCard}>
-                <div style={styles.infoCardTitle}>{item.recipeName || "Unnamed dish"}</div>
-                <div style={styles.infoCardText}>{formatMoney(item.estimatedCostIncreasePerServe)} per serve leak</div>
-                <div style={styles.infoCardSubtext}>
-                  {item.ingredientName || "Ingredient"} · GP drop {formatPercent(item.gpDropPercent)}
-                  {item.weeklySalesEstimate > 0 ? ` · ${formatMoney(item.estimatedWeeklyDamage)} weekly damage` : ""}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div style={styles.card}>
-        <div style={styles.dashboardSectionHeader}>
-          <div>
-            <h2 style={styles.sectionTitle}>📈 Ingredient Price Watch</h2>
-            <p style={styles.sectionSubtitle}>Supplier ingredients with the sharpest locked-in price movement.</p>
-          </div>
-        </div>
-        {biggestIngredientRisks.length === 0 ? (
-          <div style={styles.emptyState || styles.infoCardText}>No ingredient price risks yet. GP Police needs locked invoices with linked food rows.</div>
-        ) : (
-          <div style={styles.infoGrid}>
-            {biggestIngredientRisks.slice(0, 6).map((item: any) => (
-              <div key={`${item.ingredientId || item.ingredientName}_${item.invoiceNumber || item.invoiceDate}`} style={getAlertCardStyle(item.percentIncrease >= 25 ? "danger" : item.percentIncrease >= 15 ? "warning" : "watch")}>
-                <div style={styles.infoCardTitle}>{item.ingredientName || "Ingredient"}</div>
-                <div style={styles.infoCardText}>+{formatPercent(item.percentIncrease)}</div>
-                <div style={styles.infoCardSubtext}>{item.supplierName || "Supplier"} · {formatMoney(item.knownPurchasePrice)} → {formatMoney(item.invoicePrice)}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div style={styles.card}>
-        <div style={styles.dashboardSectionHeader}>
-          <div>
-            <h2 style={styles.sectionTitle}>💀 GP Damage Snapshot</h2>
-            <p style={styles.sectionSubtitle}>Weekly supplier price damage from locked invoices.</p>
-          </div>
+          <button type="button" style={styles.secondaryButton} onClick={() => props.handleSidebarNavigation?.("menu")}>Show The Damage</button>
         </div>
         <div style={styles.infoGrid}>
           <div style={styles.infoCard}>
-            <div style={styles.infoCardTitle}>This Week Damage</div>
+            <div style={styles.infoCardTitle}>This Week’s Hit</div>
             <div style={styles.infoCardText}>{formatMoney(gpDamageSummary.thisWeekDamage)}</div>
           </div>
           <div style={styles.infoCard}>
-            <div style={styles.infoCardTitle}>Last Week Damage</div>
+            <div style={styles.infoCardTitle}>Last Week’s Hit</div>
             <div style={styles.infoCardText}>{formatMoney(gpDamageSummary.lastWeekDamage)}</div>
           </div>
           <div style={styles.infoCard}>
-            <div style={styles.infoCardTitle}>Change</div>
-            <div style={styles.infoCardText}>{formatMoney(gpDamageSummary.weeklyChange)}</div>
+            <div style={styles.infoCardTitle}>Movement</div>
+            <div style={styles.infoCardText}>{formatMoney(gpDamageSummary.weeklyMovement)}</div>
           </div>
           <div style={styles.infoCard}>
-            <div style={styles.infoCardTitle}>Trend</div>
-            <div style={styles.infoCardText}>{gpDamageSummary.damageTrendLabel || "Damage stable"}</div>
+            <div style={styles.infoCardTitle}>Damage Trend</div>
+            <div style={styles.infoCardText}>{gpDamageSummary.damageDamageTrendLabel || "Damage stable"}</div>
           </div>
         </div>
+      </div>
+
+      <div style={{ ...styles.card, border: "1px solid rgba(248, 113, 113, 0.32)", background: "rgba(127, 29, 29, 0.14)" }}>
+        <div style={styles.dashboardSectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>🍽️ Menu Damage Scanner</h2>
+            <p style={styles.sectionSubtitle}>Turns supplier price hikes into plate-level damage. No more chef maths in the dark.</p>
+          </div>
+          <button type="button" style={styles.secondaryButton} onClick={() => props.handleSidebarNavigation?.("menu")}>Show The Damage</button>
+        </div>
+
+        <div style={styles.infoGrid}>
+          <div style={styles.infoCard}>
+            <div style={styles.infoCardTitle}>Plates Getting Hit</div>
+            <div style={styles.infoCardText}>{safeNumber(gpImpactSummary.affectedRecipeCount)}</div>
+          </div>
+          <div style={styles.infoCard}>
+            <div style={styles.infoCardTitle}>Supplier Grenades</div>
+            <div style={styles.infoCardText}>{safeNumber(gpImpactSummary.affectedIngredientCount)}</div>
+          </div>
+          <div style={styles.infoCard}>
+            <div style={styles.infoCardTitle}>Weekly Damage</div>
+            <div style={styles.infoCardText}>{formatMoney(gpImpactSummary.totalWeeklyDamage)}</div>
+          </div>
+          <div style={styles.infoCard}>
+            <div style={styles.infoCardTitle}>Per-Plate Hit</div>
+            <div style={styles.infoCardText}>{formatMoney(gpImpactSummary.totalPerServeDamage)}</div>
+          </div>
+        </div>
+
+        {gpActions.length > 0 ? (
+          <div style={{ marginTop: 14 }}>
+            <div style={styles.infoCardTitle}>Recommended Actions</div>
+            <div style={{ ...styles.infoGrid, marginTop: 10 }}>
+              {gpActions.slice(0, 4).map((action: any, index: number) => (
+                <div key={`${action.title}-${index}`} style={styles.infoCard}>
+                  <div style={styles.infoCardTitle}>{action.title}</div>
+                  <div style={styles.infoCardText}>{action.action}</div>
+                  <div style={styles.infoCardSubtext}>{action.reason}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {gpAlerts.length === 0 ? (
+          <div style={{ ...(styles.emptyState || styles.infoCardText), marginTop: 12 }}>Lock invoices against linked ingredients and GP Police will start naming the plates getting smashed.</div>
+        ) : (
+          <div style={{ ...styles.infoGrid, marginTop: 12 }}>
+            {gpAlerts.slice(0, 4).map((alert: any, index: number) => (
+              <div key={`${alert.title}-${index}`} style={styles.infoCard}>
+                <div style={styles.infoCardTitle}>{alert.title}</div>
+                <div style={styles.infoCardSubtext}>{alert.detail}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {gpBiggestLosers.length > 0 ? (
+          <div style={{ marginTop: 14 }}>
+            <div style={styles.infoCardTitle}>Worst Plate Damage</div>
+            <div style={{ ...styles.infoGrid, marginTop: 10 }}>
+              {gpBiggestLosers.slice(0, 4).map((recipe: any) => (
+                <div key={recipe.recipeId || recipe.recipeName} style={styles.infoCard}>
+                  <div style={styles.infoCardTitle}>{recipe.recipeName}</div>
+                  <div style={styles.infoCardText}>+{formatMoney(recipe.estimatedCostIncreasePerServe)} / serve</div>
+                  <div style={styles.infoCardSubtext}>{recipe.ingredientName} +{Math.round(safeNumber(recipe.percentIncrease))}%{safeNumber(recipe.estimatedWeeklyDamage) > 0 ? ` · ${formatMoney(recipe.estimatedWeeklyDamage)} weekly` : ""}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div style={styles.card}>
         <div style={styles.dashboardSectionHeader}>
           <div>
-            <h2 style={styles.sectionTitle}>🚨 Stock Damage Report</h2>
-            <p style={styles.sectionSubtitle}>Top stock losses from manual adjustments and recipe movement data.</p>
+            <h2 style={styles.sectionTitle}>🚨 Stock Damage Board</h2>
+            <p style={styles.sectionSubtitle}>Stock leaks from adjustments and movement evidence.</p>
           </div>
+          <button type="button" style={styles.secondaryButton} onClick={() => props.handleSidebarNavigation?.("stock")}>Open Stock Damage</button>
         </div>
 
         {stockDamageReport.length === 0 ? (
-          <div style={styles.emptyState || styles.infoCardText}>No stock damage found yet. Log stock adjustments first and GP Police will start calling out the losses.</div>
+          <div style={styles.emptyState || styles.infoCardText}>No stock leaks caught yet. Log stock movement and GP Police will start naming the damage.</div>
         ) : (
           <div style={styles.infoGrid}>
-            {stockDamageReport.map((item: any) => (
+            {stockDamageReport.slice(0, 4).map((item: any) => (
               <div key={item.ingredientId} style={styles.infoCard}>
                 <div style={styles.infoCardTitle}>{item.ingredientName || "Unnamed ingredient"}</div>
                 <div style={styles.infoCardText}>
-                  You're losing {formatLossQuantity(item.loss)} {item.purchaseUnit || "unit"} per week
+                  Losing {formatLossQuantity(item.loss)} {item.purchaseUnit || "unit"} per week
                 </div>
               </div>
             ))}
@@ -239,31 +374,42 @@ export function Dashboard(props: any) {
       <div style={styles.card}>
         <div style={styles.dashboardSectionHeader}>
           <div>
-            <h2 style={styles.sectionTitle}>GP Check</h2>
-            <p style={styles.sectionSubtitle}>Quick health check before the next upgrade.</p>
+            <h2 style={styles.sectionTitle}>⚠️ Fix This Before You Trust It</h2>
+            <p style={styles.sectionSubtitle}>The ugly bits. Clean these before showing off.</p>
           </div>
         </div>
         <div style={styles.infoGrid}>
-          <div style={styles.infoCard}>
-            <div style={styles.infoCardTitle}>Final dishes</div>
-            <div style={styles.infoCardText}>{finalDishes.length} ready to review.</div>
-          </div>
-          <div style={styles.infoCard}>
-            <div style={styles.infoCardTitle}>Needs attention</div>
-            <div style={styles.infoCardText}>{(props.recipesWithNoComponents?.length || 0) + (props.finalDishesWithNoSellPrice?.length || 0)} recipe issue(s) found.</div>
-          </div>
-          <div style={styles.infoCard}>
-            <div style={styles.infoCardTitle}>Estimated ordering</div>
-            <div style={styles.infoCardText}>{props.formatCurrency ? props.formatCurrency(props.estimatedOrderSpend || 0) : props.estimatedOrderSpend || 0}</div>
-          </div>
+          <button type="button" style={styles.infoCard} onClick={() => props.handleSidebarNavigation?.("recipes")}>
+            <div style={styles.infoCardTitle}>Recipes missing guts</div>
+            <div style={styles.infoCardText}>{recipesWithNoComponents.length} issue(s)</div>
+          </button>
+          <button type="button" style={styles.infoCard} onClick={() => props.handleSidebarNavigation?.("recipes")}>
+            <div style={styles.infoCardTitle}>Dishes with no sell price</div>
+            <div style={styles.infoCardText}>{finalDishesWithNoSellPrice.length} issue(s)</div>
+          </button>
+          <button type="button" style={styles.infoCard} onClick={() => props.handleSidebarNavigation?.("posSales")}>
+            <div style={styles.infoCardTitle}>POS evidence loaded</div>
+            <div style={styles.infoCardText}>{posSales.length} row(s)</div>
+          </button>
+          <button type="button" style={styles.infoCard} onClick={() => props.handleSidebarNavigation?.("ordering")}>
+            <div style={styles.infoCardTitle}>Order damage risk</div>
+            <div style={styles.infoCardText}>{formatMoney(props.estimatedOrderSpend || 0)}</div>
+          </button>
         </div>
       </div>
 
       <div style={styles.card}>
-        <div style={styles.buttonRow}>
-          <button type="button" style={styles.primaryButton} onClick={() => props.startNewRecipe?.("final dish")}>New Recipe</button>
-          <button type="button" style={styles.secondaryButton} onClick={() => props.startNewSupplierLine?.()}>New Ingredient</button>
-          <button type="button" style={styles.secondaryButton} onClick={() => props.handleSidebarNavigation?.("menu")}>Open Damage Report</button>
+        <div style={styles.dashboardSectionHeader}>
+          <div>
+            <h2 style={styles.sectionTitle}>⚡ Do Something Useful</h2>
+            <p style={styles.sectionSubtitle}>The buttons you actually need when the kitchen is moving.</p>
+          </div>
+        </div>
+        <div style={mobileButtonGridStyle}>
+          <button type="button" style={styles.primaryButton} onClick={openInvoiceCamera}>📷 Snap Invoice</button>
+          <button type="button" style={styles.secondaryButton} onClick={() => props.startNewRecipe?.("final dish")}>Build Dish</button>
+          <button type="button" style={styles.secondaryButton} onClick={() => props.startNewSupplierLine?.()}>Add Supplier Line</button>
+          <button type="button" style={styles.secondaryButton} onClick={() => props.handleSidebarNavigation?.("menu")}>Damage Board</button>
         </div>
       </div>
 

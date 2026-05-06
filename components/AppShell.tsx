@@ -50,19 +50,19 @@ export function AppShell(props: any) {
     const stockNavItem = {
       key: "stock",
       label: "Stock",
-      description: "Stock control hub for ordering, counts, invoices, and spend.",
+      description: "Stock control hub for counts, ordering, invoice evidence, and damage leaks.",
       icon: "▣",
     };
     const stocktakeNavItem = {
       key: "stocktake",
       label: "Stocktake",
-      description: "Count stock without touching movements yet.",
+      description: "Count the shelves before the numbers start lying to you.",
       icon: "▦",
     };
     const consumablesNavItem = {
       key: "consumables",
-      label: "Consumables",
-      description: "Track packaging, napkins, gloves, and kitchen disposables outside food GP.",
+      label: "Kitchen Bits",
+      description: "Packaging, gloves, napkins, and disposables kept out of food GP.",
       icon: "◈",
     };
     const withStock = navItems.some((item: any) => item.key === "stock") ? navItems : [...navItems, stockNavItem];
@@ -134,7 +134,7 @@ export function AppShell(props: any) {
             }}
             onClick={startNewRecipe}
           >
-            Start Recipe
+            Cost A Plate
           </button>
           <button
             type="button"
@@ -144,7 +144,7 @@ export function AppShell(props: any) {
             }}
             onClick={startNewSupplierLine}
           >
-            Add Ingredient
+            Add Supplier Line
           </button>
         </div>
       ) : null}
