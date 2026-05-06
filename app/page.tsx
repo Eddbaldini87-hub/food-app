@@ -71,12 +71,8 @@ import {
 import {
   safeParse,
   safeSetLocalStorageValue,
-  safeSetLocalStorageRaw,
-  safeParseVenueState,
   isValidArray,
-  isValidObject,
-  isValidVenueArray,
-  isValidVenueState
+  isValidObject
 } from "../lib/storageHelpers";
 import {
   cleanInvoiceOcrText,
@@ -198,24 +194,41 @@ export default function Page() {
 
 
   useEffect(() => {
-    const savedLockedInvoices = safeParse<any[]>(LOCKED_INVOICE_HISTORY_KEY, [], isValidArray);
+    const markStorageKeyFailed = (key: string) => {
+      setFailedStorageKeys((previous) => {
+        const next = new Set(previous);
+        next.add(key);
+        return next;
+      });
+    };
+
+    const savedLockedInvoices = safeParse<any[]>(
+      LOCKED_INVOICE_HISTORY_KEY,
+      [],
+      isValidArray,
+      markStorageKeyFailed
+    );
+
     if (Array.isArray(savedLockedInvoices)) {
       setLockedInvoiceHistory(savedLockedInvoices.slice(0, 25));
     }
-  }, []);
 
-  useEffect(() => {
-    const savedDamageHistory = safeParse<any[]>(DAMAGE_HISTORY_STORAGE_KEY, [], isValidArray);
+    const savedDamageHistory = safeParse<any[]>(
+      DAMAGE_HISTORY_STORAGE_KEY,
+      [],
+      isValidArray,
+      markStorageKeyFailed
+    );
+
     if (Array.isArray(savedDamageHistory)) {
       setDamageHistory(savedDamageHistory.slice(0, 100));
     }
-  }, []);
 
-  useEffect(() => {
     const savedInvoiceDraft = safeParse<any>(
       INVOICE_INTAKE_DRAFT_KEY,
       null,
-      (value) => !value || (typeof value === "object" && !Array.isArray(value))
+      (value) => !value || (typeof value === "object" && !Array.isArray(value)),
+      markStorageKeyFailed
     );
 
     if (!savedInvoiceDraft) return;
@@ -272,6 +285,13 @@ export default function Page() {
     if (failedStorageKeys.has(LOCKED_INVOICE_HISTORY_KEY)) return;
     safeSetLocalStorageValue(LOCKED_INVOICE_HISTORY_KEY, lockedInvoiceHistory.slice(0, 25));
   }, [storageLoaded, lockedInvoiceHistory, failedStorageKeys]);
+
+
+  useEffect(() => {
+    if (!storageLoaded) return;
+    if (failedStorageKeys.has(DAMAGE_HISTORY_STORAGE_KEY)) return;
+    safeSetLocalStorageValue(DAMAGE_HISTORY_STORAGE_KEY, damageHistory.slice(0, 100));
+  }, [storageLoaded, damageHistory, failedStorageKeys]);
 
   useEffect(() => {
     const syncViewport = () => {

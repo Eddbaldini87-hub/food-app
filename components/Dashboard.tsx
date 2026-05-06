@@ -5,7 +5,7 @@ export function Dashboard(props: any) {
   const finalDishes = Array.isArray(props.computedRecipes)
     ? props.computedRecipes.filter((recipe: any) => recipe.recipeType === "final dish")
     : [];
-  const ingredients = Array.isArray(props.supplierSupplierLines) ? props.supplierSupplierLines : [];
+  const ingredients = Array.isArray(props.supplierIngredients) ? props.supplierIngredients : [];
   const invoiceRecords = Array.isArray(props.invoiceSpendRecords) ? props.invoiceSpendRecords : [];
   const stockDamageReport = Array.isArray(props.stockDamageReport) ? props.stockDamageReport : [];
   const gpDamageSummary = props.gpDamageSummary || {};
